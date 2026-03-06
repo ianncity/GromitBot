@@ -27,20 +27,8 @@ local nextBreakAt             = nil
 local isOnBreak               = false
 local breakEndAt              = nil
 
--- ---- Gaussian-like random using Box-Muller approximation ---
--- Returns a value normally distributed around `mean` with `stddev`.
--- Clamped to [mean - 3*stddev, mean + 3*stddev] to avoid extremes.
-local function GaussRand(mean, stddev)
-    -- Box-Muller transform
-    local u1 = math.max(1e-9, math.random())
-    local u2 = math.random()
-    local z  = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
-    local v  = mean + stddev * z
-    -- Soft clamp: pull in outliers beyond 2.5 sigma
-    local lo = mean - 2.5 * stddev
-    local hi = mean + 2.5 * stddev
-    return math.max(lo, math.min(hi, v))
-end
+-- ---- Use shared Gaussian helpers ---------------------------
+local GaussRand = GB_Utils.GaussRand
 
 -- ---- Sample next interval with natural variance ------------
 -- Uses Gaussian centred at midpoint of [lo, hi].
@@ -197,6 +185,7 @@ local function StartAFKBreak()
     -- Stop all bots
     if GB_Fishing   then GB_Fishing.Stop()   end
     if GB_Herbalism then GB_Herbalism.Stop() end
+    if GB_Leveling  then GB_Leveling.Stop()  end
 
     -- Sit down for the break
     GB_Utils.After(GaussRand(2.0, 0.8), function() DoEmote("SIT") end)
@@ -217,10 +206,22 @@ local function EndAFKBreak()
         elseif cfg.mode == "herbalism" and GB_Herbalism then
             GB_Human.SetHome()
             GB_Herbalism.Start()
+        elseif cfg.mode == "leveling" and GB_Leveling then
+            GB_Human.SetHome()
+            GB_Leveling.Start()
         end
         GB_Utils.Print("[AFK] Break ended — resuming bot.")
     end)
     GB_Human.ScheduleNextBreak()
+end
+
+-- ---- Random target scan ------------------------------------
+local function DoRandomTargetScan()
+    local cfg = GromitBot_GetConfig()
+    if not cfg.humanTargetScanEnabled then return end
+    TargetNearestFriend()
+    GB_Utils.After(GaussRand(1.5, 0.6), function() ClearTarget() end)
+    GB_Utils.Debug("Target scan")
 end
 
 -- ---- Main tick (~0.5 s) ------------------------------------
@@ -296,13 +297,4 @@ function GB_Human.Tick()
         local hi = cfg.humanWiggleInterval[2] or 20
         nextWiggleAt = now + NextInterval(lo, hi)
     end
-end
-
--- ---- Renamed for clarity (used in Herbalism target scan) ---
-function DoRandomTargetScan()
-    local cfg = GromitBot_GetConfig()
-    if not cfg.humanTargetScanEnabled then return end
-    TargetNearestFriend()
-    GB_Utils.After(GaussRand(1.5, 0.6), function() ClearTarget() end)
-    GB_Utils.Debug("Target scan")
 end

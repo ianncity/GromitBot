@@ -8,12 +8,11 @@
 GB_Chat = {}
 
 -- Track per-sender say message counts this session
-local sayCounts    = {}  -- { [name] = count }
-local pendingReply = {}  -- { [name] = { type, text } }  waiting for Ollama
+local sayCounts = {}  -- { [name] = count }
 
 -- ---- Rate limiting -----------------------------------------
-local lastReplyTime = {}  -- { [name] = GetTime() }
-local REPLY_COOLDOWN = 8  -- seconds between replies to same person
+local lastReplyTime  = {}  -- { [name] = GetTime() }
+local REPLY_COOLDOWN = 8   -- seconds between replies to same person
 
 -- ---- GM canned responses (chosen randomly) ----------------
 local GM_RESPONSES = {
@@ -23,10 +22,6 @@ local GM_RESPONSES = {
     "Hey, sorry for the slow response — just chilling. What's going on?",
     "Ah, haha, sorry I'm a little slow today. How can I help?",
 }
-
--- ---- Rate limiting -----------------------------------------
-local lastReplyTime = {}  -- { [name] = GetTime() }
-local REPLY_COOLDOWN = 8  -- seconds between replies to same person
 
 -- ---- Detect if the sender name looks like a GM account ----
 local function LooksLikeGM(senderName)

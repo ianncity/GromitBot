@@ -77,11 +77,15 @@ Edit `config/bot_config.json` or use in-game slash commands:
 | Command | Description |
 |---------|-------------|
 | `/gbot start` / `stop` | Start or stop the bot |
-| `/gbot mode fishing\|herbalism` | Switch mode |
+| `/gbot mode fishing\|herbalism\|leveling` | Switch mode |
+| `/gbot profile <name>` | Load / hot-swap a leveling profile |
+| `/gbot profiles` | List all available leveling profiles |
 | `/gbot mail` | Trigger auto-mail now |
 | `/gbot status` | Show bag / mode status |
 | `/gbot debug` | Toggle debug messages |
 | `/gbot home` | Update wiggle home position |
+| `/gbot breakstop` | Cancel an in-progress AFK break |
+| `/gbot reload` | Reload the UI |
 | `/gbot help` | Show all commands |
 
 ---
@@ -91,7 +95,9 @@ Edit `config/bot_config.json` or use in-game slash commands:
 | Command | Args | Description |
 |---------|------|-------------|
 | `START` / `STOP` | — | Start or stop bot |
-| `MODE` | `fishing\|herbalism` | Switch mode |
+| `MODE` | `fishing\|herbalism\|leveling` | Switch mode |
+| `PROFILE` | `<name>` | Load / hot-swap a leveling profile |
+| `PROFILES` | — | Print available profiles to chat |
 | `SAY` | `<text>` | `/say text` |
 | `WHISPER` | `<target> <msg>` | Whisper player |
 | `EMOTE` | `<emote>` | `DoEmote(emote)` |

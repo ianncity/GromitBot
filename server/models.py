@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class BotMode(str, Enum):
     fishing   = "fishing"
     herbalism = "herbalism"
+    leveling  = "leveling"
 
 
 class AgentConfig(BaseModel):

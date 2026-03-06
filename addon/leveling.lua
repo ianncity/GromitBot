@@ -326,10 +326,10 @@ function GB_Leveling.SwapProfile(name)
     local wasRunning = state ~= STATE.IDLE
     StopMoving()
     if not GB_Profiles.Load(name) then return false end
-    lootedCorpses = {}
-    patrolIdx     = 1
-    quests_travel_NPC = nil
-    targetMob     = nil
+    lootedCorpses  = {}
+    patrolIdx      = 1
+    questTravelNPC = nil
+    targetMob      = nil
     if wasRunning then
         SetState(STATE.PATROL)
         GB_Utils.Print("[Leveling] Hot-swapped profile to: " .. name)
@@ -482,7 +482,10 @@ function GB_Leveling.Tick()
         if not targetMob then SetState(STATE.SCAN_MOB); return end
 
         local px, py = 0, 0
-        if GB_GetPlayerPos then px, py = select(1, GB_GetPlayerPos()), select(2, GB_GetPlayerPos()) end
+        if GB_GetPlayerPos then
+            local x, y = GB_GetPlayerPos()
+            px, py = x, y
+        end
         local dist = GB_Utils.Dist2D(px, py, targetMob.x, targetMob.y)
 
         -- Use PULL_RANGE if profile has ranged abilities, else close to melee
@@ -571,7 +574,10 @@ function GB_Leveling.Tick()
 
         -- Move to corpse if needed
         local px, py = 0, 0
-        if GB_GetPlayerPos then px, py = select(1, GB_GetPlayerPos()), select(2, GB_GetPlayerPos()) end
+        if GB_GetPlayerPos then
+            local x, y = GB_GetPlayerPos()
+            px, py = x, y
+        end
         local dist = GB_Utils.Dist2D(px, py, targetMob.x, targetMob.y)
 
         if dist > REACH_MOB then
@@ -618,14 +624,20 @@ function GB_Leveling.Tick()
         -- Build waypoints on first entry
         if #questTravelWPs == 0 then
             local px, py = 0, 0
-            if GB_GetPlayerPos then px, py = select(1, GB_GetPlayerPos()), select(2, GB_GetPlayerPos()) end
+            if GB_GetPlayerPos then
+                local x, y = GB_GetPlayerPos()
+                px, py = x, y
+            end
             questTravelWPs = BuildPath(px, py, questTravelNPC.x, questTravelNPC.y)
             questTravelIdx = 1
         end
 
         -- Check arrival at NPC
         local px, py = 0, 0
-        if GB_GetPlayerPos then px, py = select(1, GB_GetPlayerPos()), select(2, GB_GetPlayerPos()) end
+        if GB_GetPlayerPos then
+            local x, y = GB_GetPlayerPos()
+            px, py = x, y
+        end
         local distToNPC = GB_Utils.Dist2D(px, py, questTravelNPC.x, questTravelNPC.y)
 
         if distToNPC <= REACH_MOB then

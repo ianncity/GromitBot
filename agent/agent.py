@@ -4,11 +4,12 @@ agent.py — GromitBot VM Agent
 Runs on each Windows VM that runs a WoW instance.
 
 • Listens on TCP port (default 9000) for JSON commands from the
-  FastAPI management server.
+  Discord bot (running on a separate VM/repo).
 • Writes received commands to a local file (command.txt) which
   the Lua addon polls every second.
-• Reads a status JSON file written by the Lua addon and serves
-  it back to the management server on request.
+• Reads a status JSON file written by the Lua addon and pushes
+  it to a Discord webhook on a configurable interval, reporting
+  useful info such as zone, level, mode, and bag fill %.
 
 Command protocol (JSON over newline-delimited TCP):
   → {"cmd": "JUMP"}
@@ -24,6 +25,10 @@ Command protocol (JSON over newline-delimited TCP):
   → {"cmd": "RELOAD"}
 
 Response: {"ok": true, "data": ...} or {"ok": false, "error": ...}
+
+Discord webhook env vars:
+  DISCORD_WEBHOOK_URL    — full webhook URL (required for status push)
+  DISCORD_STATUS_INTERVAL — seconds between pushes (default 60)
 """
 
 import asyncio
@@ -35,13 +40,17 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
+
 # ---- Config -------------------------------------------------
-LISTEN_HOST      = "0.0.0.0"
-LISTEN_PORT      = 9000
-COMMAND_FILE     = Path(os.environ.get("GROMITBOT_CMD_FILE",   r"C:\GromitBot\command.txt"))
-STATUS_FILE      = Path(os.environ.get("GROMITBOT_STATUS_FILE", r"C:\GromitBot\command_status.json"))
-LOG_LEVEL        = os.environ.get("LOG_LEVEL", "INFO").upper()
-HEARTBEAT_SECS   = 30   # seconds between keep-alive logs
+LISTEN_HOST             = "0.0.0.0"
+LISTEN_PORT             = 9000
+COMMAND_FILE            = Path(os.environ.get("GROMITBOT_CMD_FILE",   r"C:\GromitBot\command.txt"))
+STATUS_FILE             = Path(os.environ.get("GROMITBOT_STATUS_FILE", r"C:\GromitBot\command_status.json"))
+LOG_LEVEL               = os.environ.get("LOG_LEVEL", "INFO").upper()
+HEARTBEAT_SECS          = 30   # seconds between keep-alive logs
+DISCORD_WEBHOOK_URL     = os.environ.get("DISCORD_WEBHOOK_URL", "")
+DISCORD_STATUS_INTERVAL = int(os.environ.get("DISCORD_STATUS_INTERVAL", "60"))
 
 # ---- Logging ------------------------------------------------
 logging.basicConfig(
@@ -53,6 +62,65 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger("gromitbot-agent")
+
+# ---- Discord helpers ----------------------------------------
+def _build_discord_payload(status: dict) -> dict:
+    """Format a bot status dict into a Discord webhook embed payload."""
+    char_name = status.get("name", "Unknown")
+    zone      = status.get("zone", "Unknown")
+    level     = status.get("level", "?")
+    mode      = status.get("mode", "unknown")
+    running   = status.get("running", False)
+    bag_pct   = status.get("bagFillPct", 0)
+    xp        = status.get("xp", None)
+    hp        = status.get("hp", None)
+    mana      = status.get("mana", None)
+
+    colour    = 0x2ecc71 if running else 0xe74c3c  # green / red
+
+    fields = [
+        {"name": "Zone",   "value": str(zone),  "inline": True},
+        {"name": "Level",  "value": str(level), "inline": True},
+        {"name": "Mode",   "value": str(mode),  "inline": True},
+        {"name": "Status", "value": "Running" if running else "Stopped", "inline": True},
+        {"name": "Bags",   "value": f"{bag_pct}%", "inline": True},
+    ]
+    if xp is not None:
+        fields.append({"name": "XP", "value": str(xp), "inline": True})
+    if hp is not None:
+        fields.append({"name": "HP",   "value": str(hp),   "inline": True})
+    if mana is not None:
+        fields.append({"name": "Mana", "value": str(mana), "inline": True})
+
+    return {
+        "embeds": [{
+            "title":       f"GromitBot — {char_name}",
+            "description": f"Status update at <t:{int(time.time())}:T>",
+            "color":       colour,
+            "fields":      fields,
+        }]
+    }
+
+
+async def push_discord_status(status: dict) -> None:
+    """POST a status embed to the configured Discord webhook."""
+    if not DISCORD_WEBHOOK_URL:
+        return
+    payload = _build_discord_payload(status)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                DISCORD_WEBHOOK_URL,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status not in (200, 204):
+                    text = await resp.text()
+                    log.warning("Discord webhook returned %d: %s", resp.status, text[:200])
+                else:
+                    log.debug("Discord status pushed (HTTP %d)", resp.status)
+    except Exception as exc:
+        log.warning("Failed to push Discord status: %s", exc)
 
 # ---- Valid commands set ------------------------------------
 VALID_CMDS = {
@@ -156,6 +224,19 @@ async def heartbeat() -> None:
         log.info("Heartbeat — bot status: %s", json.dumps(status))
 
 
+# ---- Discord status pusher ---------------------------------
+async def discord_status_pusher() -> None:
+    """Periodically push bot status to the Discord webhook."""
+    if not DISCORD_WEBHOOK_URL:
+        log.info("DISCORD_WEBHOOK_URL not set — status push disabled")
+        return
+    log.info("Discord status pusher started (interval=%ds)", DISCORD_STATUS_INTERVAL)
+    while True:
+        await asyncio.sleep(DISCORD_STATUS_INTERVAL)
+        status = read_status()
+        await push_discord_status(status)
+
+
 # ---- Main --------------------------------------------------
 async def main() -> None:
     # Ensure command file exists and is writable
@@ -170,6 +251,7 @@ async def main() -> None:
     log.info("Status  file : %s", STATUS_FILE)
 
     asyncio.create_task(heartbeat())
+    asyncio.create_task(discord_status_pusher())
 
     async with server:
         await server.serve_forever()

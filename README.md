@@ -1,20 +1,25 @@
 # GromitBot — WoW 1.12 Vanilla Bot for Turtle WoW
 
-C++/Lua bot for WoW 1.12.1 (build 5875) on Turtle WoW with a Python management layer for remote control.
+C++/Lua bot for WoW 1.12.1 (build 5875) on Turtle WoW with a Python agent that pushes live status to a Discord bot for remote monitoring and control.
 
 ---
 
 ## Architecture
 
 ```
-FastAPI Server (server/main.py)   ← REST API, broadcasts to all agents
-        │ TCP JSON :8000
-Python Agent (agent/agent.py)     ← per-VM, listens :9000, polls files
+Discord Bot (separate repo / VM)  ← /commands received by users in Discord
+        │ TCP JSON :9000
+Python Agent (agent/agent.py)     ← per-VM, listens :9000, polls files,
+        │                              pushes status to Discord webhook
         │ file I/O (1 s poll)
 WoW.exe + GromitBot.dll           ← D3D8 hook, memory reads, GB_* Lua fns
         │ SuperWoW Lua API
 GromitBot Addon (Lua)             ← fishing/herbalism, chat, auto-mail, human behaviour
 ```
+
+The Discord bot lives in a **separate GitHub repository** and runs on a **separate VM**.
+It receives `/commands` from Discord users, forwards them to the agent over TCP, and
+displays the live status embeds that the agent pushes via webhook.
 
 ---
 
@@ -23,7 +28,7 @@ GromitBot Addon (Lua)             ← fishing/herbalism, chat, auto-mail, human 
 | Component | Requirement |
 |-----------|-------------|
 | C++ DLL | VS 2022 ("Desktop C++" workload), CMake ≥ 3.20, DirectX 8 SDK, Lua 5.1 headers/lib |
-| Python | 3.11+, `pip install -r agent/requirements.txt` and `server/requirements.txt` |
+| Python | 3.11+, `pip install -r agent/requirements.txt` |
 | WoW client | 1.12.1 build 5875, SuperWoW (pre-built binaries in [`superwow/`](superwow/)), Ollama (`ollama serve && ollama pull llama3`) |
 
 ---
@@ -62,13 +67,15 @@ build\Release\injector.exe 1234    :: or pass a PID
 ```cmd
 cd agent && python agent.py        :: listens on 0.0.0.0:9000
 ```
-Env vars: `GROMITBOT_CMD_FILE` (default `C:\GromitBot\command.txt`), `GROMITBOT_STATUS_FILE`, `LOG_LEVEL`.
+Env vars:
 
-**Management Server:**
-```cmd
-cd server && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-Docs: http://localhost:8000/docs
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GROMITBOT_CMD_FILE` | `C:\GromitBot\command.txt` | Command file path |
+| `GROMITBOT_STATUS_FILE` | `C:\GromitBot\command_status.json` | Status file path |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+| `DISCORD_WEBHOOK_URL` | *(empty)* | Discord webhook URL for status push |
+| `DISCORD_STATUS_INTERVAL` | `60` | Seconds between Discord status updates |
 
 ---
 
@@ -94,6 +101,8 @@ Edit `config/bot_config.json` or use in-game slash commands:
 
 ## Agent Command Reference
 
+Commands are sent as newline-delimited JSON over TCP to port 9000 (used by the Discord bot):
+
 | Command | Args | Description |
 |---------|------|-------------|
 | `START` / `STOP` | — | Start or stop bot |
@@ -109,6 +118,22 @@ Edit `config/bot_config.json` or use in-game slash commands:
 | `RELOAD` | — | `ReloadUI()` |
 | `DISCONNECT` | — | `/quit` |
 | `PRINT` | `<text>` | Print to chat frame |
+
+---
+
+## Discord Status Push
+
+The agent periodically (every `DISCORD_STATUS_INTERVAL` seconds) posts a rich embed to
+`DISCORD_WEBHOOK_URL` with the following fields sourced from the status JSON:
+
+- **Zone** — current in-game zone
+- **Level** — character level
+- **Mode** — active bot mode (fishing / herbalism / leveling)
+- **Status** — Running / Stopped
+- **Bags** — bag fill percentage
+- **XP / HP / Mana** — when available
+
+The Discord bot (separate repo) then relays `/commands` back to the agent via TCP.
 
 ---
 

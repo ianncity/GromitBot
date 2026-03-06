@@ -156,7 +156,7 @@ async def push_discord_status(status: dict) -> None:
 VALID_CMDS = {
     "DISCONNECT", "JUMP", "SAY", "WHISPER", "STOP", "START",
     "MODE", "MAIL", "STATUS", "PRINT", "RELOAD", "EMOTE",
-    "SIT", "STAND", "PROFILE", "PROFILES",
+    "SIT", "STAND", "PROFILE", "PROFILES", "POSITION",
 }
 
 
@@ -180,6 +180,9 @@ def read_status(bot_id: int = 0) -> dict:
                 data = json.loads(text)
                 data["bot_id"] = bot_id
                 data["vm_id"]  = VM_ID
+                # Normalise character name: Lua writes "player", Discord bot reads "name"
+                if "name" not in data:
+                    data["name"] = data.get("player", "Unknown")
                 return data
     except Exception as exc:
         log.warning("Bot %d: failed to read status: %s", bot_id, exc)
@@ -279,6 +282,17 @@ async def handle_client(reader: asyncio.StreamReader,
                         resp = {
                             "ok":   True,
                             "data": {str(i): read_status(i) for i in targets},
+                            "vm_id": VM_ID,
+                        }
+
+                elif cmd == "POSITION":
+                    if len(targets) == 1:
+                        resp = {"ok": True, "data": read_status(targets[0]),
+                                "bot": targets[0], "vm_id": VM_ID}
+                    else:
+                        resp = {
+                            "ok":   True,
+                            "data": {"bots": [read_status(i) for i in targets]},
                             "vm_id": VM_ID,
                         }
                 else:

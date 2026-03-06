@@ -17,6 +17,7 @@
 --   PROFILES            — print available profiles to chat
 --   MAIL                — trigger auto-mail immediately
 --   STATUS              — write status JSON to response file
+--   POSITION            — write status JSON with fresh world-map coordinates
 --   PRINT <text>        — print text to chat frame
 --   RELOAD              — ReloadUI()
 -- ============================================================
@@ -47,6 +48,38 @@ local function WriteFile(path, content)
     end
 end
 
+-- ---- Get 0-1 world-map coordinates ----------------------------
+local function GetWorldMapCoords()
+    -- Save current map state so we can restore it afterwards
+    local savedContinent = GetCurrentMapContinent()
+    local savedZone      = GetCurrentMapZone()
+
+    local x, y
+    -- pcall guards against unexpected API behaviour in edge cases
+    local ok = pcall(function()
+        -- continent 0 = full world (Azeroth) view in WoW 1.12
+        SetMapZoom(0)
+        x, y = GetPlayerMapPosition("player")
+    end)
+
+    -- Restore previous map zoom; fall back to SetMapToCurrentZone on failure
+    local restored = pcall(function()
+        if savedContinent and savedContinent >= 0 then
+            SetMapZoom(savedContinent, savedZone)
+        else
+            SetMapToCurrentZone()
+        end
+    end)
+    if not restored then
+        pcall(SetMapToCurrentZone)
+    end
+
+    if ok and x and y then
+        return x, y
+    end
+    return nil, nil
+end
+
 -- ---- Build status JSON string ------------------------------
 local function BuildStatusJSON()
     local cfg    = GromitBot_GetConfig()
@@ -66,13 +99,20 @@ local function BuildStatusJSON()
     local activeProfile = GB_Profiles and GB_Profiles.Active()
     local profileName   = (activeProfile and activeProfile.name) or ""
 
+    -- World-map position (0-1 fractions); may be nil if unavailable
+    local mapX, mapY = GetWorldMapCoords()
+    local mapFields = ""
+    if mapX and mapY then
+        mapFields = string.format(',"mapX":%.4f,"mapY":%.4f', mapX, mapY)
+    end
+
     return string.format(
-        '{"player":"%s","zone":"%s","mode":"%s","running":%s,'
+        '{"player":"%s","name":"%s","zone":"%s","mode":"%s","running":%s,'
         .. '"hp":%d,"maxhp":%d,"bagFull":%.1f,"freeSlots":%d,'
-        .. '"level":%d,"profile":"%s","time":%.0f}',
-        player, zone, mode, running and "true" or "false",
+        .. '"level":%d,"profile":"%s","time":%.0f%s}',
+        player, player, zone, mode, running and "true" or "false",
         hp, maxhp, fullPct, freeSlots,
-        plevel, profileName, GetTime()
+        plevel, profileName, GetTime(), mapFields
     )
 end
 
@@ -163,6 +203,12 @@ local function ExecuteCommand(line)
         GB_Inventory.StartAutoMail()
 
     elseif cmd == "STATUS" then
+        if STATUS_FILE then
+            WriteFile(STATUS_FILE, BuildStatusJSON())
+        end
+
+    elseif cmd == "POSITION" then
+        -- Force an immediate status write with fresh world-map coordinates
         if STATUS_FILE then
             WriteFile(STATUS_FILE, BuildStatusJSON())
         end

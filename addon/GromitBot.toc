@@ -1,0 +1,22 @@
+## Interface: 11200
+## Title: GromitBot
+## Notes: Fishing / Herbalism bot with Ollama AI chat — Turtle WoW
+## Author: GromitBot
+## Version: 1.0.0
+## SavedVariables: GromitBotConfig
+##
+## X-SuperWoW: 1
+##
+## Require: SuperWoW
+##
+## OptionalDeps: SuperWoW
+
+utils.lua
+config.lua
+inventory.lua
+human_behavior.lua
+chat_listener.lua
+fishing.lua
+herbalism.lua
+command_poller.lua
+GromitBot.lua

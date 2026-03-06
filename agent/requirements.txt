@@ -1,0 +1,2 @@
+# GromitBot VM Agent — Python dependencies
+asyncio-dgram>=2.1.2   # optional; not required for TCP-only

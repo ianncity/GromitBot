@@ -1,0 +1,29 @@
+{
+  "_comment": "GromitBot configuration — edit and save to C:\\GromitBot\\config.json",
+  "_note":    "This file is used only by the Python agent at launch for overrides.",
+
+  "mode":             "fishing",
+  "mailTarget":       "Bankalt",
+  "mailThreshold":    80,
+
+  "ollamaModel":      "llama3",
+  "ollamaPort":       11434,
+  "ollamaPersona":    "You are a friendly World of Warcraft player on the Turtle WoW server. Respond naturally and in-character, keep replies short (1-2 sentences), use WoW slang where appropriate. Never break character.",
+
+  "chatReplyMinSayMessages": 2,
+  "chatReplySayRange":       20,
+
+  "farmZone":   "Arathi Highlands",
+  "herbEntries": [3355, 3357, 3818, 3821, 3820],
+
+  "navmeshPath": "Interface\\AddOns\\GromitBot\\navmesh\\arathi.nav",
+
+  "humanJumpChance":    0.08,
+  "humanTurnAmount":    0.15,
+  "humanTurnInterval":  [4, 10],
+  "humanWiggleRadius":  2.0,
+  "humanWiggleInterval":[8, 20],
+
+  "commandFilePath": "C:\\GromitBot\\command.txt",
+  "debug": false
+}

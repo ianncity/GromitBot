@@ -81,6 +81,7 @@ local function HandleGMContact(senderName, msgType)
     GB_Utils.After(stopDelay * 0.1, function()
         if GB_Fishing   then GB_Fishing.Stop()   end
         if GB_Herbalism then GB_Herbalism.Stop() end
+        if GB_Leveling  then GB_Leveling.Stop()  end
     end)
 
     -- Send a human-like confused reply after a natural delay
@@ -198,11 +199,13 @@ local function QueryOllamaAndReply(msgType, senderName, text)
 end
 
 -- ---- Main event handler (registered in GromitBot.lua) ------
-function GB_Chat.OnChatMessage(msgType, text, language, channelName,
-                                playerName, minimap, zone, channelNum,
+-- WoW 1.12 CHAT_MSG_SAY/WHISPER arg order:
+--   arg1=message, arg2=senderName, arg3=language, arg4=channelName, ...
+function GB_Chat.OnChatMessage(msgType, text, senderName, language, channelName,
+                                minimap, zone, channelNum,
                                 channelName2, unused, lineId, guid)
-    -- Strip realm name from playerName (e.g. "Name-TurtleWoW" → "Name")
-    local senderName = playerName and playerName:match("^([^%-]+)") or playerName
+    -- Strip realm name from senderName (e.g. "Name-TurtleWoW" → "Name")
+    senderName = senderName and senderName:match("^([^%-]+)") or senderName
     if not senderName or senderName == "" then return end
 
     -- Ignore own messages

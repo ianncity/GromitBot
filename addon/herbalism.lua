@@ -106,10 +106,8 @@ local function StopMoving()
 end
 
 local function StepToward(tx, ty)
-    local px, py, pz = GB_GetPlayerPos and GB_GetPlayerPos() or 0, 0, 0
-    if GB_GetPlayerPos then
-        px, py, pz = GB_GetPlayerPos()
-    end
+    local px, py, pz = 0, 0, 0
+    if GB_GetPlayerPos then px, py, pz = GB_GetPlayerPos() end
     local dx, dy = tx - px, ty - py
     local dist = math.sqrt(dx * dx + dy * dy)
     if dist < WP_REACH_DIST then return true end  -- reached this waypoint

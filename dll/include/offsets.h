@@ -18,6 +18,8 @@
 // ---- Unit descriptors (player/mob) -------------------------
 #define UNIT_FIELD_HEALTH          0x58 * 4  // descriptor array index * 4
 #define UNIT_FIELD_MAXHEALTH       0x60 * 4
+#define UNIT_FIELD_MANA            0x59 * 4  // power type 0 (mana)
+#define UNIT_FIELD_MAXMANA         0x61 * 4
 #define UNIT_FIELD_LEVEL           0x36 * 4
 #define UNIT_FIELD_FLAGS           0xB6 * 4
 #define UNIT_FIELD_TARGET          0x12 * 4

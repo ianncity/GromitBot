@@ -66,6 +66,19 @@ int L_GetPlayerHealth(lua_State* L) {
     return 2;
 }
 
+int L_GetPlayerMana(lua_State* L) {
+    WoWObject lp = ObjectManager::GetLocalPlayer();
+    lua_pushinteger(L, lp.IsValid() ? lp.GetMana()    : 0);
+    lua_pushinteger(L, lp.IsValid() ? lp.GetMaxMana() : 0);
+    return 2;
+}
+
+int L_GetPlayerLevel(lua_State* L) {
+    WoWObject lp = ObjectManager::GetLocalPlayer();
+    lua_pushinteger(L, lp.IsValid() ? lp.GetLevel() : 1);
+    return 1;
+}
+
 int L_IsCasting(lua_State* L) {
     int spellId = 0;
     Memory::SafeRead(PLAYER_CASTING_ID, spellId);
@@ -115,6 +128,34 @@ int L_FindNearestHerb(lua_State* L) {
     float dist = herb.DistanceTo(px, py, pz);
     lua_pushnumber(L, dist);
     return 6; // guid_lo, x, y, z, entry, distance
+}
+
+int L_FindNearestMob(lua_State* L) {
+    // First arg: table of entry IDs to search for
+    std::vector<int> entries;
+    if (lua_istable(L, 1)) {
+        lua_pushnil(L);
+        while (lua_next(L, 1)) {
+            entries.push_back((int)lua_tointeger(L, -1));
+            lua_pop(L, 1);
+        }
+    }
+    float px = ReadFloat(PLAYER_POS_X);
+    float py = ReadFloat(PLAYER_POS_Y);
+    float pz = ReadFloat(PLAYER_POS_Z);
+    WoWObject mob = ObjectManager::FindNearestMob(px, py, pz, entries);
+    if (!mob.IsValid()) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushinteger(L, (int)(mob.guid & 0xFFFFFFFF)); // guidLo
+    lua_pushnumber(L,  mob.GetX());
+    lua_pushnumber(L,  mob.GetY());
+    lua_pushnumber(L,  mob.GetZ());
+    lua_pushinteger(L, mob.GetEntry());
+    lua_pushnumber(L,  mob.DistanceTo(px, py, pz));
+    lua_pushnil(L); // name not available from descriptor; Lua uses `mname or "Mob"` fallback
+    return 7; // guidLo, x, y, z, entry, dist, name
 }
 
 int L_GetNearbyObjects(lua_State* L) {
@@ -227,10 +268,13 @@ void RegisterAll(lua_State* L) {
         { "GB_GetPlayerPos",       L_GetPlayerPos       },
         { "GB_GetPlayerFacing",    L_GetPlayerFacing     },
         { "GB_GetPlayerHealth",    L_GetPlayerHealth     },
+        { "GB_GetPlayerMana",      L_GetPlayerMana       },
+        { "GB_GetPlayerLevel",     L_GetPlayerLevel      },
         { "GB_IsCasting",          L_IsCasting           },
         { "GB_GetMapID",           L_GetMapID            },
         { "GB_FindFishingBobber",  L_FindFishingBobber   },
         { "GB_FindNearestHerb",    L_FindNearestHerb     },
+        { "GB_FindNearestMob",     L_FindNearestMob      },
         { "GB_GetNearbyObjects",   L_GetNearbyObjects    },
         { "GB_GetObjectHealth",    L_GetObjectHealth     },
         { "GB_GetInventoryFullness", L_GetInventoryFullness },

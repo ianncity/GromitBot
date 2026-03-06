@@ -58,6 +58,8 @@ struct WoWObject {
     // Unit-specific
     int  GetHealth()    const;
     int  GetMaxHealth() const;
+    int  GetMana()      const;
+    int  GetMaxMana()   const;
     int  GetLevel()     const;
     bool IsCasting()    const;
     bool IsDead()       const;
@@ -81,4 +83,6 @@ namespace ObjectManager {
     WoWObject    FindFishingBobber();
     WoWObject    FindNearestHerbNode(float x, float y, float z,
                                      const std::vector<int>& herbEntryIds);
+    WoWObject    FindNearestMob(float x, float y, float z,
+                                const std::vector<int>& entryIds);
 }

@@ -161,30 +161,9 @@ if not defined PYTHON (
     echo [+] Python found: %PYTHON%
 )
 
-:: ---- 0e. Ollama -----------------------------------------------
+:: ---- 0e. Lua 5.1 headers and static lib -----------------------
 echo.
-echo [0e] Checking Ollama...
-where ollama >nul 2>&1
-if errorlevel 1 (
-    echo [*] Ollama not found -- installing...
-    winget install --id Ollama.Ollama ^
-        --silent --accept-package-agreements --accept-source-agreements
-    if errorlevel 1 (
-        echo [!] Ollama installation failed.
-        goto :error
-    )
-    :: Add the typical Ollama install path
-    if exist "%LOCALAPPDATA%\Programs\Ollama" (
-        set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Ollama"
-    )
-    echo [+] Ollama installed.
-) else (
-    echo [+] Ollama already installed.
-)
-
-:: ---- 0f. Lua 5.1 headers and static lib -----------------------
-echo.
-echo [0f] Checking Lua 5.1 ^(headers + static lib^)...
+echo [0e] Checking Lua 5.1 ^(headers + static lib^)...
 if not exist "%LUA_LIB%" (
     echo [*] Lua 5.1 not found at %LUA_DIR% -- downloading from luabinaries...
     :: Note: %%20 is the batch-escaped form of %20 (URL space encoding).
@@ -215,9 +194,9 @@ if not exist "%LUA_LIB%" (
     echo [+] Lua 5.1 already present.
 )
 
-:: ---- 0g. DirectX 8 SDK headers --------------------------------
+:: ---- 0f. DirectX 8 SDK headers --------------------------------
 echo.
-echo [0g] Checking DirectX 8 SDK headers...
+echo [0f] Checking DirectX 8 SDK headers...
 if not exist "%D3D8_INCLUDE_DIR%\d3d8.h" (
     echo [*] DXSDK headers not found -- downloading from apitrace/dxsdk...
     curl -L --silent "https://github.com/apitrace/dxsdk/archive/refs/heads/master.zip" ^
@@ -240,32 +219,15 @@ if not exist "%D3D8_INCLUDE_DIR%\d3d8.h" (
     echo [+] DXSDK headers already present.
 )
 
-:: ---- 0h. Python agent dependencies ---------------------------
+:: ---- 0g. Python agent dependencies ---------------------------
 echo.
-echo [0h] Installing Python agent requirements...
+echo [0g] Installing Python agent requirements...
 "%PYTHON%" -m pip install --quiet -r "%SCRIPT_DIR%agent\requirements.txt"
 if errorlevel 1 (
     echo [!] pip install failed.
     goto :error
 )
 echo [+] Python requirements installed.
-
-:: ---- 0i. Ollama llama3 model ----------------------------------
-echo.
-echo [0i] Checking Ollama llama3 model...
-ollama list 2>nul | find /i "llama3" >nul
-if errorlevel 1 (
-    echo [*] llama3 not found -- pulling model ^(~4.7 GB, may take a while^)...
-    ollama pull llama3
-    if errorlevel 1 (
-        echo [!] ollama pull llama3 failed.  Ensure Ollama is installed and
-        echo     you have an internet connection, then re-run.
-        goto :error
-    )
-    echo [+] llama3 model downloaded.
-) else (
-    echo [+] llama3 already present.
-)
 
 echo.
 echo [+] All prerequisites satisfied.
@@ -374,15 +336,6 @@ if not exist "%SWOW_LAUNCHER%" (
 :: ================================================================
 echo [6/6] Starting services, launching Turtle WoW, and injecting...
 
-:: Start Ollama server in the background (skip if already running)
-echo [*] Starting Ollama server in background...
-tasklist /fi "imagename eq ollama.exe" 2>nul | find /i "ollama.exe" >nul
-if errorlevel 1 (
-    start "" /b ollama serve
-) else (
-    echo [+] Ollama server already running.
-)
-
 :: Start the Python agent in a new window (per-VM agent on port 9000)
 echo [*] Starting Python agent ^(port 9000^)...
 start "GromitBot Agent" cmd /k "%PYTHON%" "%SCRIPT_DIR%agent\agent.py"
@@ -427,7 +380,6 @@ echo ================================================================
 echo   GromitBot injected successfully!
 echo   Start the bot in-game with:  /gbot start
 echo   Python agent is running in its own window on port 9000.
-echo   Ollama server is running in the background.
 echo ================================================================
 goto :end
 

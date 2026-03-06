@@ -22,6 +22,7 @@ setlocal EnableDelayedExpansion
 set "WOW_DIR=C:\TurtleWoW"
 set "LUA_DIR=C:\lua51"
 set "DXSDK_DIR=C:\DXSDK"
+set "GROMITBOT_DIR=C:\GromitBot"
 
 :: Seconds to wait for WoW.exe to appear in the process list
 set "WOW_WAIT_SECS=60"
@@ -336,6 +337,12 @@ if not exist "%SWOW_LAUNCHER%" (
 :: ================================================================
 echo [6/6] Starting services, launching Turtle WoW, and injecting...
 
+:: Ensure the GromitBot data directory exists (agent log + command files live here)
+if not exist "%GROMITBOT_DIR%" mkdir "%GROMITBOT_DIR%"
+
+:: Tell the agent where to store bot files (keeps GROMITBOT_DIR as single source of truth)
+set "GROMITBOT_BOT_BASE_DIR=%GROMITBOT_DIR%\bots"
+
 :: Start the Python agent in a new window (per-VM agent on port 9000)
 echo [*] Starting Python agent ^(port 9000^)...
 start "GromitBot Agent" cmd /k "%PYTHON%" "%SCRIPT_DIR%agent\agent.py"
@@ -392,5 +399,7 @@ pause
 exit /b 1
 
 :end
+echo.
+pause
 endlocal
 exit /b 0

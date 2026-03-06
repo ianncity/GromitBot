@@ -75,12 +75,14 @@ DISCORD_WEBHOOK_URL     = os.environ.get("DISCORD_WEBHOOK_URL", "")
 DISCORD_STATUS_INTERVAL = int(os.environ.get("DISCORD_STATUS_INTERVAL", "60"))
 
 # ---- Logging ------------------------------------------------
+_LOG_FILE = BOT_BASE_DIR.parent / "agent.log"
+_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(r"C:\GromitBot\agent.log", encoding="utf-8"),
+        logging.FileHandler(_LOG_FILE, encoding="utf-8"),
     ],
 )
 log = logging.getLogger("gromitbot-agent")

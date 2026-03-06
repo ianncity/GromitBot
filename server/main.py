@@ -33,7 +33,6 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-import httpx
 from fastapi import FastAPI, HTTPException, Path, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -184,7 +183,7 @@ async def stop_bot(vm_id: str = Path(...)) -> dict:
     return await send_command(agent, {"cmd": "STOP"})
 
 
-@app.post("/agents/{vm_id}/mode", summary="Set bot mode (fishing|herbalism)")
+@app.post("/agents/{vm_id}/mode", summary="Set bot mode (fishing|herbalism|leveling)")
 async def set_mode(
     body: SetModeRequest,
     vm_id: str = Path(...),

@@ -43,12 +43,7 @@ static std::string BuildOllamaJSON(const OllamaRequest& req) {
 static std::string ExtractResponseField(const std::string& json) {
     const std::string key = "\"response\":\"";
     auto pos = json.find(key);
-    if (pos == std::string::npos) {
-        // Try non-streaming: full body IS the response JSON
-        auto p2 = json.find("\"response\":\"");
-        if (p2 == std::string::npos) return json; // return raw
-        pos = p2;
-    }
+    if (pos == std::string::npos) return json; // field not found — return raw body
     size_t start = pos + key.size();
     std::string out;
     bool escape = false;

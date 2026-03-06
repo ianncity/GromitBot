@@ -75,6 +75,20 @@ int WoWObject::GetMaxHealth() const {
     Memory::SafeRead(desc + UNIT_FIELD_MAXHEALTH, v);
     return v;
 }
+int WoWObject::GetMana() const {
+    int v = 0;
+    uintptr_t desc = 0;
+    Memory::SafeRead(base + 0x8, desc);
+    Memory::SafeRead(desc + UNIT_FIELD_MANA, v);
+    return v;
+}
+int WoWObject::GetMaxMana() const {
+    int v = 0;
+    uintptr_t desc = 0;
+    Memory::SafeRead(base + 0x8, desc);
+    Memory::SafeRead(desc + UNIT_FIELD_MAXMANA, v);
+    return v;
+}
 int WoWObject::GetLevel() const {
     int v = 0;
     uintptr_t desc = 0;
@@ -198,6 +212,24 @@ WoWObject FindNearestHerbNode(float x, float y, float z,
         if (obj.type != OBJECT_TYPE_GAMEOBJECT) continue;
         int entry = obj.GetEntry();
         for (int id : herbEntryIds) {
+            if (id == entry) {
+                float d = obj.DistanceTo(x, y, z);
+                if (d < nearestDist) { nearestDist = d; nearest = obj; }
+                break;
+            }
+        }
+    }
+    return nearest;
+}
+
+WoWObject FindNearestMob(float x, float y, float z,
+                          const std::vector<int>& entryIds) {
+    WoWObject nearest;
+    float nearestDist = 1e9f;
+    for (auto& obj : EnumerateObjects()) {
+        if (obj.type != OBJECT_TYPE_UNIT) continue;
+        int entry = obj.GetEntry();
+        for (int id : entryIds) {
             if (id == entry) {
                 float d = obj.DistanceTo(x, y, z);
                 if (d < nearestDist) { nearestDist = d; nearest = obj; }

@@ -154,8 +154,9 @@ local function StartWiggle()
     isWiggling = true
 
     if MoveToPosition then
-        local _, _, pz = GB_GetPlayerPos and GB_GetPlayerPos() or homeX, homeY, homeZ
-        MoveToPosition(tx, ty, pz or homeZ)
+        local pz = homeZ
+        if GB_GetPlayerPos then local _, _, z = GB_GetPlayerPos(); pz = z or homeZ end
+        MoveToPosition(tx, ty, pz)
 
         local returnDelay = GaussRand(2.2, 0.5)
         returnDelay = math.max(1.0, math.min(4.0, returnDelay))

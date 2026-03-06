@@ -25,12 +25,15 @@ namespace LuaBridge {
 int L_GetPlayerPos(lua_State* L);         // -> x, y, z
 int L_GetPlayerFacing(lua_State* L);      // -> facing (radians)
 int L_GetPlayerHealth(lua_State* L);      // -> hp, maxhp
+int L_GetPlayerMana(lua_State* L);        // -> mana, maxmana
+int L_GetPlayerLevel(lua_State* L);       // -> level
 int L_IsCasting(lua_State* L);            // -> bool
 int L_GetMapID(lua_State* L);             // -> mapId
 
 // Object queries
 int L_FindFishingBobber(lua_State* L);    // -> guid_low, guid_high, x, y, z  (or nil)
 int L_FindNearestHerb(lua_State* L);      // -> guid_low, x, y, z, entry  (or nil)
+int L_FindNearestMob(lua_State* L);       // entryTable -> guid_low, x, y, z, entry, dist, name (or nil)
 int L_GetNearbyObjects(lua_State* L);     // radius -> table of {guid,type,x,y,z}
 int L_GetObjectHealth(lua_State* L);      // guid_low -> hp, maxhp
 

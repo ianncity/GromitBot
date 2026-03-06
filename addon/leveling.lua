@@ -618,33 +618,30 @@ function GB_Leveling.Tick()
             StepToward(targetMob.x, targetMob.y)
             if now - stateTime > 8 then
                 -- Can't reach corpse — give up
+                lootedCorpses[targetMob.guid] = true
                 targetMob = nil
                 SetState(STATE.CHECK_QUEST)
             end
             return
         end
 
-        -- Attempt to loot
+        -- Interact once to open the loot frame; OnLootOpened advances state
         if lootAttempts == 0 then
+            lootAttempts = 1
             if SuperWoW_InteractObject then
                 SuperWoW_InteractObject(targetMob.guid)
             else
                 RunMacroText("/loot")
             end
-            lootAttempts = 1
+            return
         end
 
-        -- LootFrame opened → auto-loot handled by LOOT_OPENED event
-        -- Mark as looted so we don't return to this corpse
-        lootedCorpses[targetMob.guid] = true
-        targetMob = nil
-
-        -- Check if rest needed between kills — with small Gaussian evaluation delay
-        GB_Utils.After(GR(0.6, 0.2), function()
-            if state == STATE.LOOT_MOB then
-                SetState(STATE.CHECK_QUEST)
-            end
-        end)
+        -- Timeout: loot frame never opened (mob may not be lootable)
+        if now - stateTime > 5 then
+            lootedCorpses[targetMob.guid] = true
+            targetMob = nil
+            SetState(STATE.CHECK_QUEST)
+        end
 
     -- ================================================================
     elseif state == STATE.CHECK_QUEST then
@@ -781,6 +778,10 @@ function GB_Leveling.OnLootOpened()
     -- Auto-loot handled centrally in GromitBot.lua LOOT_OPENED handler;
     -- transition loot state forward if we were looting.
     if state == STATE.LOOT_MOB then
+        if targetMob then
+            lootedCorpses[targetMob.guid] = true
+            targetMob = nil
+        end
         SetState(STATE.CHECK_QUEST)
     end
 end

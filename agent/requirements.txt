@@ -1,3 +1,2 @@
 # GromitBot VM Agent — Python dependencies
 aiohttp>=3.9.0            # Discord webhook status push
-asyncio-dgram>=2.1.2      # optional; not required for TCP-only

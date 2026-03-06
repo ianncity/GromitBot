@@ -2,6 +2,10 @@
 build/
 *.dll
 *.exe
+
+# Allow pre-built SuperWoW binaries
+!superwow/*.dll
+!superwow/*.exe
 *.obj
 *.pdb
 *.ilk

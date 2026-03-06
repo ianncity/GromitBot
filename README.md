@@ -24,7 +24,7 @@ GromitBot Addon (Lua)             ← fishing/herbalism, chat, auto-mail, human 
 |-----------|-------------|
 | C++ DLL | VS 2022 ("Desktop C++" workload), CMake ≥ 3.20, DirectX 8 SDK, Lua 5.1 headers/lib |
 | Python | 3.11+, `pip install -r agent/requirements.txt` and `server/requirements.txt` |
-| WoW client | 1.12.1 build 5875, [SuperWoW](https://github.com/balakethelock/SuperWoW), Ollama (`ollama serve && ollama pull llama3`) |
+| WoW client | 1.12.1 build 5875, SuperWoW (pre-built binaries in [`superwow/`](superwow/)), Ollama (`ollama serve && ollama pull llama3`) |
 
 ---
 
@@ -47,6 +47,8 @@ Output: `build\Release\GromitBot.dll` and `build\Release\injector.exe`
 ---
 
 ## Install & Run
+
+**SuperWoW:** See [`superwow/README.md`](superwow/README.md) for setup instructions.
 
 **Lua Addon:** Copy `addon/` to `C:\WoW\Interface\AddOns\GromitBot\` and enable it in the addon selector.
 

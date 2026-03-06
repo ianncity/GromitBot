@@ -50,3 +50,18 @@ set_target_properties(GromitBot PROPERTIES
     SUFFIX ".dll"
     PREFIX ""
 )
+
+# ---- Injector executable ------------------------------------
+add_executable(injector src/injector.cpp)
+
+if(MSVC)
+    target_compile_options(injector PRIVATE /MT /O2 /W3 /std:c++17 /EHsc)
+    set_target_properties(injector PROPERTIES
+        LINK_FLAGS "/INCREMENTAL:NO"
+    )
+endif()
+
+set_target_properties(injector PROPERTIES
+    OUTPUT_NAME "injector"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)

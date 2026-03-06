@@ -130,6 +130,3 @@ Key offsets: `STATIC_CLIENT_CONNECTION` `0x00C79CE0`, `PLAYER_POS_X/Y/Z` `0xABD6
 - **Mail**: `ClickSendMailItemButton()` requires SuperWoW; standard 1.12 needs a different method.
 - **File I/O**: SuperWoW re-enables `io.*` (`ReadFile_SWoW`/`WriteFile_SWoW`); command poller is a no-op without it.
 
----
-
-> **Disclaimer:** Educational use only. Botting may violate server ToS. Authors bear no responsibility for account actions.

@@ -23,10 +23,10 @@ local DEFAULTS = {
         .. "Respond naturally and in-character, keep replies short (1-2 sentences), "
         .. "use WoW slang where appropriate. Never break character.",
 
-    -- Only reply to whispers, or to /say if the sender is within 20 yards
-    -- AND has sent >= 2 messages this session.
-    chatReplyMinSayMessages = 2,
-    chatReplySayRange       = 20,
+    -- Only reply to whispers, or to /say if the sender is within 10 ft.
+    -- Never reply to the same person more than chatReplyMaxPerSender times per session.
+    chatReplySayRange       = 10,  -- ft (approx 3.3 WoW yards)
+    chatReplyMaxPerSender   = 3,
 
     -- GM / staff detection: stop bot and send a confused reply if a whisper
     -- looks like it might be from a GM. Pattern matched case-insensitively.

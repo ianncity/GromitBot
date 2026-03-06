@@ -8,7 +8,10 @@
 GB_Chat = {}
 
 -- Track per-sender say message counts this session
-local sayCounts = {}  -- { [name] = count }
+local sayCounts = {}    -- { [name] = count }
+
+-- Track how many times we have replied to each sender this session
+local replyCounts = {}  -- { [name] = count }
 
 -- ---- Typing-pause state -----------------------------------
 -- Set to true from the moment a reply is triggered until a short
@@ -111,23 +114,21 @@ end
 local function ShouldReply(msgType, senderName, x, y, z)
     local cfg = GromitBot_GetConfig()
 
-    if msgType == "WHISPER" then
-        return true  -- always reply to whispers
-    end
-
-    -- SAY: only if in range AND sufficient messages
-    local cnt = sayCounts[senderName] or 0
-    if cnt < cfg.chatReplyMinSayMessages then
-        GB_Utils.Debug(senderName .. " SAY count " .. cnt .. " < min — ignoring")
+    -- Never reply more than chatReplyMaxPerSender times to the same person
+    local replies = replyCounts[senderName] or 0
+    if replies >= cfg.chatReplyMaxPerSender then
+        GB_Utils.Debug(senderName .. " reply limit reached (" .. replies .. ") — ignoring")
         return false
     end
 
-    -- Range check
+    if msgType == "WHISPER" then
+        return true  -- always reply to whispers (within limit)
+    end
+
+    -- SAY: only if sender is within chatReplySayRange ft
     local px, py, pz = 0, 0, 0
     if GB_GetPlayerPos then px, py, pz = GB_GetPlayerPos() end
 
-    -- For SAY we need sender position — use UnitPosition(unit) where unit = target
-    -- This only works if the sender is in our object manager.
     -- Heuristic: check if they are within chatReplySayRange via last known pos
     -- (populated by seeing them in object manager).
     local dist = cfg.chatReplySayRange  -- default: assume in range if we can't check
@@ -182,6 +183,7 @@ local function QueryOllamaAndReply(msgType, senderName, text)
         end
 
         lastReplyTime[senderName] = GetTime()
+        replyCounts[senderName] = (replyCounts[senderName] or 0) + 1
         GB_Utils.Debug("Replied to " .. senderName .. ": " .. response)
 
         -- Brief post-send pause before resuming movement—simulates the
@@ -242,4 +244,5 @@ end
 function GB_Chat.Reset()
     sayCounts      = {}
     lastReplyTime  = {}
+    replyCounts    = {}
 end

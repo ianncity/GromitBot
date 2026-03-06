@@ -65,6 +65,7 @@ local questTravelMode = nil  -- "turnin" | "accept"
 local lastAbilityTime = 0
 local pullTimeout     = 8    -- s — give up pull if nothing happens
 local combatTimeout   = 30   -- s — emergency break out of stuck combat
+local nextStrafeAt    = 0    -- absolute time: next combat strafe check
 local lootedCorpses   = {}   -- guid set to avoid reloot
 
 -- NPC interaction
@@ -144,15 +145,27 @@ local function RestComplete(profile)
     return true
 end
 
--- ---- Build straight-line waypoints -------------------------
+-- ---- Build curved waypoints (arc + micro-jitter) -----------
+-- Uses a Gaussian lateral arc so the path is never a straight line,
+-- defeating the straight-line movement detector described by observers.
 local function BuildPath(sx, sy, ex, ey)
-    local path = {}
+    local path   = {}
     local dx, dy = ex - sx, ey - sy
     local dist   = math.sqrt(dx * dx + dy * dy)
-    local steps  = math.max(1, math.floor(dist / 3))
+    local steps  = math.max(2, math.floor(dist / 3))
+    -- Unit normal perpendicular to the travel direction
+    local len    = math.max(dist, 0.01)
+    local nx, ny = -dy / len, dx / len
+    -- Gaussian lateral peak offset capped at ±15 % of total distance
+    local peakOff = GB_Utils.GaussRand(0, dist * 0.07)
+    peakOff = math.max(-dist * 0.15, math.min(dist * 0.15, peakOff))
     for i = 1, steps do
-        local t = i / steps
-        table.insert(path, { x = sx + dx * t, y = sy + dy * t })
+        local t       = i / steps
+        local lateral = peakOff * math.sin(t * math.pi)
+        table.insert(path, {
+            x = sx + dx * t + nx * lateral + GB_Utils.GaussRand(0, 0.3),
+            y = sy + dy * t + ny * lateral + GB_Utils.GaussRand(0, 0.3),
+        })
     end
     return path
 end
@@ -349,6 +362,9 @@ function GB_Leveling.Tick()
 
     -- ---- On AFK break: do nothing --------------------------
     if GB_Human and GB_Human.IsOnBreak() then return end
+
+    -- ---- Freeze movement while LLM is composing a reply ----
+    if GB_Chat and GB_Chat.IsTyping() then return end
 
     -- ---- Inventory overflow: delegate to mail system -------
     if state ~= STATE.IDLE and state ~= STATE.CHECK_MAIL then
@@ -548,6 +564,24 @@ function GB_Leveling.Tick()
             targetMob = nil
             SetState(STATE.PATROL)
             return
+        end
+
+        -- Periodic combat strafing — real players reposition continuously;
+        -- a bot that stands perfectly still is immediately identifiable.
+        if now >= nextStrafeAt then
+            nextStrafeAt = now + math.max(1.5, math.min(5.0, GR(2.8, 0.9)))
+            if math.random() < 0.45 then
+                -- Pick a random lateral direction and duration
+                local dur = math.max(0.2, math.min(0.9, GR(0.45, 0.18)))
+                if math.random() < 0.5 then
+                    StrafeLeftStart()
+                    GB_Utils.After(dur, function() StrafeLeftStop() end)
+                else
+                    StrafeRightStart()
+                    GB_Utils.After(dur, function() StrafeRightStop() end)
+                end
+                GB_Utils.Debug("[Combat] Strafe for " .. string.format("%.1f", dur) .. "s")
+            end
         end
 
         -- Execute ability rotation with natural Gaussian timing

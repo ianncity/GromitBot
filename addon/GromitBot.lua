@@ -130,7 +130,8 @@ masterFrame:SetScript("OnEvent", function()
 
     -- ---- Combat events (leveling) ---------------------------
     elseif evt == "PLAYER_REGEN_DISABLED" then
-        if GB_Leveling then GB_Leveling.OnEnterCombat() end
+        if GB_Herbalism then GB_Herbalism.OnEnterCombat() end
+        if GB_Leveling  then GB_Leveling.OnEnterCombat()  end
 
     elseif evt == "PLAYER_REGEN_ENABLED" then
         -- Left combat — leveling bot checks rest in its next tick

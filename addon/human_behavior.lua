@@ -21,6 +21,10 @@ local nextScanAt              = 0
 local nextPitchAt             = 0
 local isWiggling              = false
 
+-- Nearby player awareness — tracks names seen recently so we react
+-- more visibly to a player we haven't seen before (mimicking curiosity).
+local nearbyPlayerCache = {}   -- { [name] = { seenAt = time, count = n } }
+
 -- AFK / session break state
 local sessionStartTime        = nil
 local nextBreakAt             = nil
@@ -215,12 +219,48 @@ local function EndAFKBreak()
     GB_Human.ScheduleNextBreak()
 end
 
--- ---- Random target scan ------------------------------------
+-- ---- Random target scan — with player-awareness -----------
+-- Alternates targeting friends/enemies so we notice hostile
+-- players approaching, not just friendly ones.
+-- Tracks "new" players and reacts with visible curiosity.
 local function DoRandomTargetScan()
     local cfg = GromitBot_GetConfig()
     if not cfg.humanTargetScanEnabled then return end
-    TargetNearestFriend()
-    GB_Utils.After(GaussRand(1.5, 0.6), function() ClearTarget() end)
+    local now = GetTime()
+
+    -- Broaden scan: sometimes check for enemies/hostile players too
+    if math.random() < 0.55 then
+        TargetNearestFriend()
+    else
+        TargetNearestEnemy()
+    end
+
+    if UnitExists and UnitExists("target")
+       and UnitIsPlayer and UnitIsPlayer("target") then
+        local name = UnitName("target") or ""
+        local data = nearbyPlayerCache[name]
+        if not data then
+            -- First time noticing this player — react with visible curiosity
+            nearbyPlayerCache[name] = { seenAt = now, count = 1 }
+            local roll = math.random()
+            if roll < 0.30 then
+                DoEmote("WAVE")
+            elseif roll < 0.55 then
+                DoEmote("NOD")
+            end
+            -- Hold target longer — a real player would study a newcomer
+            GB_Utils.After(GaussRand(4.0, 1.0), function() ClearTarget() end)
+            GB_Utils.Debug("Noticed new nearby player: " .. name)
+        else
+            -- Seen before — brief recognition glance then dismiss
+            data.seenAt = now
+            data.count  = data.count + 1
+            GB_Utils.After(GaussRand(1.5, 0.5), function() ClearTarget() end)
+        end
+    else
+        -- No player in view — clear immediately
+        GB_Utils.After(0.3, function() ClearTarget() end)
+    end
     GB_Utils.Debug("Target scan")
 end
 
@@ -282,14 +322,23 @@ function GB_Human.Tick()
         local lo = cfg.humanScanInterval[1] or 30
         local hi = cfg.humanScanInterval[2] or 90
         nextScanAt = now + NextInterval(lo, hi)
+        -- Prune player cache: forget players not seen for 5 minutes
+        for name, data in pairs(nearbyPlayerCache) do
+            if now - data.seenAt > 300 then
+                nearbyPlayerCache[name] = nil
+            end
+        end
     end
 
     -- ---- Position wiggle ------------------------------------
     if not isWiggling and now >= nextWiggleAt then
         local mode = cfg.mode
         local doWiggle = false
-        if mode == "fishing"   and GB_Fishing   and GB_Fishing.IsRunning()   then doWiggle = true end
-        if mode == "herbalism" and GB_Herbalism and GB_Herbalism.IsRunning() then doWiggle = true end
+        -- Don't wiggle while the bot is standing still to type a reply
+        if not (GB_Chat and GB_Chat.IsTyping()) then
+            if mode == "fishing"   and GB_Fishing   and GB_Fishing.IsRunning()   then doWiggle = true end
+            if mode == "herbalism" and GB_Herbalism and GB_Herbalism.IsRunning() then doWiggle = true end
+        end
 
         if doWiggle then StartWiggle() end
 

@@ -16,6 +16,7 @@ GB_Herbalism = {}
 
 local STATE = {
     IDLE       = "IDLE",
+    NOTICE     = "NOTICE",    -- brief reaction pause after spotting a node
     SCAN       = "SCAN",
     PATHFIND   = "PATHFIND",
     INTERACT   = "INTERACT",
@@ -24,26 +25,37 @@ local STATE = {
     CHECK_MAIL = "CHECK_MAIL",
 }
 
-local state        = STATE.IDLE
-local stateTime    = 0
-local targetNode   = nil   -- {guid, x, y, z, entry}
-local waypoints    = {}    -- list of {x,y} waypoints from navmesh
-local wpIdx        = 0
-local interactSent = false
+local state               = STATE.IDLE
+local stateTime           = 0
+local targetNode          = nil   -- {guid, x, y, z, entry}
+local waypoints           = {}    -- list of {x,y} waypoints from navmesh
+local wpIdx               = 0
+local interactSent        = false
+local combatCooldownUntil = 0     -- absolute time: don't resume farming before this
 local REACH_DIST   = 4.5   -- yards to consider "at node"
 local SCAN_RANGE   = 100   -- yards (visual range)
 
--- ---- Navmesh placeholder -----------------------------------
--- A real navmesh would be a prebuilt grid/graph stored in a file.
--- Here we use a straight-line walk divided into 2-yard steps.
-local function BuildStraightPath(sx, sy, ex, ey)
-    local path = {}
+-- ---- Curved path builder -----------------------------------
+-- Adds a Gaussian-distributed lateral arc plus per-step micro-jitter
+-- so paths are never perfectly straight, defeating straight-line detection.
+local function BuildCurvedPath(sx, sy, ex, ey)
+    local path   = {}
     local dx, dy = ex - sx, ey - sy
-    local dist = math.sqrt(dx * dx + dy * dy)
-    local steps = math.max(1, math.floor(dist / 2))
+    local dist   = math.sqrt(dx * dx + dy * dy)
+    local steps  = math.max(2, math.floor(dist / 2))
+    -- Unit normal perpendicular to the path direction
+    local len    = math.max(dist, 0.01)
+    local nx, ny = -dy / len, dx / len
+    -- Smooth arc: Gaussian peak offset capped at ±15 % of path length
+    local peakOff = GB_Utils.GaussRand(0, dist * 0.07)
+    peakOff = math.max(-dist * 0.15, math.min(dist * 0.15, peakOff))
     for i = 1, steps do
-        local t = i / steps
-        table.insert(path, { x = sx + dx * t, y = sy + dy * t })
+        local t       = i / steps
+        local lateral = peakOff * math.sin(t * math.pi)
+        -- Per-step micro-jitter keeps individual segments irregular
+        local wx = sx + dx * t + nx * lateral + GB_Utils.GaussRand(0, 0.25)
+        local wy = sy + dy * t + ny * lateral + GB_Utils.GaussRand(0, 0.25)
+        table.insert(path, { x = wx, y = wy })
     end
     return path
 end
@@ -146,6 +158,9 @@ end
 function GB_Herbalism.Tick()
     local now = GetTime()
 
+    -- Freeze movement while the chat LLM is composing a reply
+    if GB_Chat and GB_Chat.IsTyping() then return end
+
     -- -------- Inventory check --------------------------------
     if state ~= STATE.IDLE and state ~= STATE.CHECK_MAIL then
         if GB_Inventory.ShouldMail() and not GB_Inventory.mailPending then
@@ -179,9 +194,20 @@ function GB_Herbalism.Tick()
         end
         targetNode = { guid = guidLo, x = hx, y = hy, z = hz, entry = entry }
         GB_Utils.Debug(string.format("Found herb entry %d at %.1f yards", entry, dist))
+        -- Transition through NOTICE: simulate the player "seeing" the node
+        -- on the minimap before committing to a direction change.
+        SetState(STATE.NOTICE)
 
-        local px, py, pz = GB_GetPlayerPos()
-        waypoints = BuildStraightPath(px, py, hx, hy)
+    elseif state == STATE.NOTICE then
+        -- Gaussian-sampled reaction pause (0.3 – 1.4 s) before pathing.
+        -- Eliminates the instant back-turn that reveals bot movement.
+        local noticeDur = math.max(0.3, math.min(1.4,
+            GB_Utils.GaussRand(0.65, 0.28)))
+        if now - stateTime < noticeDur then return end
+        if not targetNode then SetState(STATE.SCAN); return end
+        local px, py, pz = 0, 0, 0
+        if GB_GetPlayerPos then px, py, pz = GB_GetPlayerPos() end
+        waypoints = BuildCurvedPath(px, py, targetNode.x, targetNode.y)
         wpIdx = 1
         interactSent = false
         SetState(STATE.PATHFIND)
@@ -235,7 +261,9 @@ function GB_Herbalism.Tick()
         SetState(STATE.COOLDOWN)
 
     elseif state == STATE.COOLDOWN then
-        if now - stateTime > 1.5 then
+        -- Respect combat-imposed pause before resuming farming
+        local ready = (now - stateTime > 1.5) and (now >= combatCooldownUntil)
+        if ready then
             SetState(STATE.SCAN)
         end
     end
@@ -246,4 +274,22 @@ function GB_Herbalism.OnLootOpened()
     if state == STATE.INTERACT then
         SetState(STATE.LOOT)
     end
+end
+
+-- ---- Combat hook: called when player enters combat ---------
+-- Stops farming and backs away briefly so the bot doesn't just
+-- stand frozen in place (the #1 tell from player-reported observations).
+function GB_Herbalism.OnEnterCombat()
+    if state == STATE.IDLE then return end
+    StopMoving()
+    -- Brief back-step mimics a surprised player's instinctive recoil
+    MoveBackwardStart()
+    local fleeDur = math.max(1.0, math.min(3.5,
+        GB_Utils.GaussRand(2.0, 0.6)))
+    GB_Utils.After(fleeDur, function() MoveBackwardStop() end)
+    -- Extended cooldown: don't resume farming until well after combat ends
+    combatCooldownUntil = GetTime() + math.max(8, math.min(22,
+        GB_Utils.GaussRand(14, 4)))
+    SetState(STATE.COOLDOWN)
+    GB_Utils.Debug("[Herbalism] Combat detected — pausing farming")
 end

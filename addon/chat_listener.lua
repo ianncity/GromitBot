@@ -10,6 +10,25 @@ GB_Chat = {}
 -- Track per-sender say message counts this session
 local sayCounts = {}  -- { [name] = count }
 
+-- ---- Typing-pause state -----------------------------------
+-- Set to true from the moment a reply is triggered until a short
+-- period after the message is sent, so the character stands still
+-- while "composing" — exactly as a real player would.
+local isTyping = false
+
+function GB_Chat.IsTyping()
+    return isTyping
+end
+
+-- Cancel CTM and all movement keys so the character freezes in place.
+local function StopAllMovement()
+    MoveForwardStop()
+    MoveBackwardStop()
+    StrafeLeftStop()
+    StrafeRightStop()
+    if MoveToPosition then MoveToPosition(0, 0, 0, 0) end
+end
+
 -- ---- Rate limiting -----------------------------------------
 local lastReplyTime  = {}  -- { [name] = GetTime() }
 local REPLY_COOLDOWN = 8   -- seconds between replies to same person
@@ -128,9 +147,14 @@ local function QueryOllamaAndReply(msgType, senderName, text)
     -- Human-like delay: 2–4 seconds (simulate typing)
     local replyDelay = GB_Utils.RandFloat(2.0, 4.0)
 
+    -- Stop moving immediately — a real player stops to type.
+    isTyping = true
+    StopAllMovement()
+
     GB_Utils.After(replyDelay, function()
         if not GB_OllamaSend then
             GB_Utils.Debug("GB_OllamaSend not available (DLL not loaded)")
+            isTyping = false
             return
         end
         local prompt = BuildPrompt(msgType, senderName, text)
@@ -141,6 +165,7 @@ local function QueryOllamaAndReply(msgType, senderName, text)
         )
         if not response then
             GB_Utils.Debug("Ollama error: " .. (err or "unknown"))
+            isTyping = false
             return
         end
 
@@ -158,6 +183,14 @@ local function QueryOllamaAndReply(msgType, senderName, text)
 
         lastReplyTime[senderName] = GetTime()
         GB_Utils.Debug("Replied to " .. senderName .. ": " .. response)
+
+        -- Brief post-send pause before resuming movement—simulates the
+        -- moment a player hits Enter then moves their hand back to WASD.
+        local resumeDelay = math.max(0.5, math.min(2.5,
+            GB_Utils.GaussRand(1.1, 0.45)))
+        GB_Utils.After(resumeDelay, function()
+            isTyping = false
+        end)
     end)
 end
 

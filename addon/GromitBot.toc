@@ -1,8 +1,8 @@
 ## Interface: 11200
 ## Title: GromitBot
-## Notes: Fishing / Herbalism bot with Ollama AI chat — Turtle WoW
+## Notes: Fishing / Herbalism / Leveling bot with Ollama AI chat — Turtle WoW
 ## Author: GromitBot
-## Version: 1.0.0
+## Version: 1.1.0
 ## SavedVariables: GromitBotConfig
 ##
 ## X-SuperWoW: 1
@@ -18,5 +18,10 @@ human_behavior.lua
 chat_listener.lua
 fishing.lua
 herbalism.lua
+profile_registry.lua
+profiles\elwynn.lua
+profiles\westfall.lua
+profiles\redridge.lua
+leveling.lua
 command_poller.lua
 GromitBot.lua

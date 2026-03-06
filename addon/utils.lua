@@ -9,6 +9,27 @@ function GB_Utils.RandFloat(lo, hi)
     return lo + math.random() * (hi - lo)
 end
 
+-- ---- Gaussian (normal) random via Box-Muller ---------------
+-- Returns a value normally distributed around `mean` with `stddev`.
+-- Soft-clamped to ±2.5 sigma to avoid extreme outliers.
+function GB_Utils.GaussRand(mean, stddev)
+    local u1 = math.max(1e-9, math.random())
+    local u2 = math.random()
+    local z  = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+    local v  = mean + stddev * z
+    local lo = mean - 2.5 * stddev
+    local hi = mean + 2.5 * stddev
+    return math.max(lo, math.min(hi, v))
+end
+
+-- ---- Gaussian interval sampler — Gaussian centred on midpoint -------
+-- Returns a sample within [lo, hi] using ~18 % of range as 1 sigma.
+function GB_Utils.GaussInterval(lo, hi)
+    local mid = (lo + hi) * 0.5
+    local sd  = (hi - lo) * 0.18
+    return math.max(lo, math.min(hi, GB_Utils.GaussRand(mid, sd)))
+end
+
 -- ---- Round to n decimal places -----------------------------
 function GB_Utils.Round(v, n)
     local m = 10 ^ (n or 0)

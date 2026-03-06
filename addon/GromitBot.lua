@@ -5,7 +5,7 @@
 -- ============================================================
 
 -- ---- Version -----------------------------------------------
-GROMITBOT_VERSION = "1.0.0"
+GROMITBOT_VERSION = "1.1.0"
 
 -- ---- Master frame ------------------------------------------
 local masterFrame = CreateFrame("Frame", "GromitBotFrame", UIParent)
@@ -20,6 +20,9 @@ masterFrame:RegisterEvent("MAIL_SEND_SUCCESS")
 masterFrame:RegisterEvent("CHAT_MSG_SAY")
 masterFrame:RegisterEvent("CHAT_MSG_WHISPER")
 masterFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+masterFrame:RegisterEvent("PLAYER_REGEN_DISABLED")  -- enter combat
+masterFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- leave combat
+masterFrame:RegisterEvent("UNIT_DIED")
 -- SuperWoW custom events
 masterFrame:RegisterEvent("BOBBER_SPLASH")    -- fishing bobber event (SuperWoW)
 masterFrame:RegisterEvent("SUPERWOW_LOOT")    -- auto-loot (SuperWoW)
@@ -46,6 +49,7 @@ masterFrame:SetScript("OnUpdate", function()
         local cfg = GromitBot_GetConfig()
         if cfg.mode == "fishing"   and GB_Fishing   then GB_Fishing.Tick()   end
         if cfg.mode == "herbalism" and GB_Herbalism then GB_Herbalism.Tick() end
+        if cfg.mode == "leveling"  and GB_Leveling  then GB_Leveling.Tick()  end
     end
 
     if now - lastTickHuman >= TICK_HUMAN then
@@ -73,10 +77,15 @@ masterFrame:SetScript("OnEvent", function()
         GromitBot_LoadConfig()
         GB_Chat.Reset()
         GB_CmdPoller.Init()
+        -- Auto-load leveling profile from config if set
+        local cfg = GromitBot_GetConfig()
+        if cfg.levelingProfile and cfg.levelingProfile ~= "" then
+            GB_Profiles.Load(cfg.levelingProfile)
+        end
         initialized = true
         GB_Utils.Print("GromitBot v" .. GROMITBOT_VERSION .. " loaded. Mode: "
             .. (GromitBotConfig.mode or "?")
-            .. " | /gbot start|stop|mode|help")
+            .. " | /gbot start|stop|mode|profile|help")
 
     elseif evt == "PLAYER_ENTERING_WORLD" then
         -- Re-set home whenever we enter world
@@ -89,6 +98,7 @@ masterFrame:SetScript("OnEvent", function()
             LootSlot(i)
         end
         if GB_Herbalism then GB_Herbalism.OnLootOpened() end
+        if GB_Leveling  then GB_Leveling.OnLootOpened()  end
 
     elseif evt == "LOOT_CLOSED" then
         -- nothing
@@ -118,6 +128,17 @@ masterFrame:SetScript("OnEvent", function()
             GB_Fishing.OnSpellCast(arg2)
         end
 
+    -- ---- Combat events (leveling) ---------------------------
+    elseif evt == "PLAYER_REGEN_DISABLED" then
+        if GB_Leveling then GB_Leveling.OnEnterCombat() end
+
+    elseif evt == "PLAYER_REGEN_ENABLED" then
+        -- Left combat — leveling bot checks rest in its next tick
+
+    elseif evt == "UNIT_DIED" then
+        -- arg1 = unit token ("target", "player", etc.)
+        if GB_Leveling then GB_Leveling.OnUnitDied(arg1) end
+
     -- ---- SuperWoW custom events ----------------------------
     elseif evt == "BOBBER_SPLASH" then
         -- arg1 = bobber GUID (provided by SuperWoW)
@@ -139,6 +160,10 @@ SlashCmdList["GROMITBOT"] = function(msg)
 
     if cmd == "start" then
         local cfg = GromitBot_GetConfig()
+        if GB_Human.IsOnBreak() then
+            GB_Utils.Print("Bot is on an AFK break — use /gbot breakstop to cancel.")
+            return
+        end
         GB_Human.SetHome()
         if cfg.mode == "fishing" then
             GB_Fishing.Start()
@@ -146,23 +171,70 @@ SlashCmdList["GROMITBOT"] = function(msg)
         elseif cfg.mode == "herbalism" then
             GB_Herbalism.Start()
             GB_Utils.Print("Herbalism bot started.")
+        elseif cfg.mode == "leveling" then
+            local profile = GB_Profiles.Active()
+            if not profile then
+                GB_Utils.Print("No profile loaded. Use /gbot profile <name> first.")
+                GB_Utils.Print("Available: " .. GB_Profiles.ListNames())
+            else
+                GB_Leveling.Start()
+                GB_Utils.Print("Leveling bot started with profile: " .. profile.name)
+            end
         else
             GB_Utils.Print("Unknown mode: " .. (cfg.mode or "nil"))
+        end
+
+    elseif cmd == "breakstop" then
+        -- Force-cancel an active AFK break
+        if GB_Human.IsOnBreak() then
+            GB_Human.CancelBreak()
+            GB_Utils.Print("AFK break cancelled.")
+        else
+            GB_Utils.Print("Not currently on a break.")
         end
 
     elseif cmd == "stop" then
         if GB_Fishing   then GB_Fishing.Stop()   end
         if GB_Herbalism then GB_Herbalism.Stop() end
+        if GB_Leveling  then GB_Leveling.Stop()  end
         GB_Utils.Print("Bot stopped.")
 
     elseif cmd == "mode" then
         local newMode = args and args:lower() or ""
-        if newMode == "fishing" or newMode == "herbalism" then
+        if newMode == "fishing" or newMode == "herbalism" or newMode == "leveling" then
             GromitBotConfig.mode = newMode
             GB_Utils.Print("Mode set to " .. newMode .. ". Type /gbot start to begin.")
         else
-            GB_Utils.Print("Usage: /gbot mode fishing|herbalism")
+            GB_Utils.Print("Usage: /gbot mode fishing|herbalism|leveling")
         end
+
+    elseif cmd == "profile" then
+        -- Load (and optionally hot-swap) a leveling profile
+        local name = args and GB_Utils.Trim(args) or ""
+        if name == "" then
+            local active = GB_Profiles.Active()
+            if active then
+                GB_Utils.Print("Active profile: " .. active.name)
+            else
+                GB_Utils.Print("No profile active.")
+            end
+            GB_Utils.Print("Available: " .. GB_Profiles.ListNames())
+        elseif GB_Leveling and GB_Leveling.IsRunning() then
+            -- Hot-swap while running
+            if GB_Leveling.SwapProfile(name) then
+                GromitBotConfig.mode = "leveling"
+                GromitBotConfig.levelingProfile = name
+            end
+        else
+            if GB_Profiles.Load(name) then
+                GromitBotConfig.mode = "leveling"
+                GromitBotConfig.levelingProfile = name
+                GB_Utils.Print("Profile set. Type /gbot start to begin.")
+            end
+        end
+
+    elseif cmd == "profiles" then
+        GB_Utils.Print("Available profiles: " .. GB_Profiles.ListNames())
 
     elseif cmd == "mail" then
         GB_Inventory.StartAutoMail()
@@ -189,14 +261,18 @@ SlashCmdList["GROMITBOT"] = function(msg)
 
     elseif cmd == "help" or cmd == "" then
         GB_Utils.Print("--- GromitBot v" .. GROMITBOT_VERSION .. " ---")
-        GB_Utils.Print("/gbot start          — start configured bot mode")
-        GB_Utils.Print("/gbot stop           — stop bot")
-        GB_Utils.Print("/gbot mode fishing   — switch to fishing mode")
-        GB_Utils.Print("/gbot mode herbalism — switch to herbalism mode")
-        GB_Utils.Print("/gbot mail           — send bags to mailTarget now")
-        GB_Utils.Print("/gbot status         — show bag/mode status")
-        GB_Utils.Print("/gbot debug          — toggle debug messages")
-        GB_Utils.Print("/gbot home           — update home position")
+        GB_Utils.Print("/gbot start              — start configured bot mode")
+        GB_Utils.Print("/gbot stop               — stop bot")
+        GB_Utils.Print("/gbot mode fishing       — switch to fishing mode")
+        GB_Utils.Print("/gbot mode herbalism     — switch to herbalism mode")
+        GB_Utils.Print("/gbot mode leveling      — switch to leveling mode")
+        GB_Utils.Print("/gbot profile <name>     — load/hot-swap a leveling profile")
+        GB_Utils.Print("/gbot profiles           — list all available profiles")
+        GB_Utils.Print("/gbot mail               — send bags to mailTarget now")
+        GB_Utils.Print("/gbot status             — show bag/mode status")
+        GB_Utils.Print("/gbot debug              — toggle debug messages")
+        GB_Utils.Print("/gbot home               — update home position")
+        GB_Utils.Print("/gbot breakstop          — cancel active AFK break")
     else
         GB_Utils.Print("Unknown command. Type /gbot help")
     end

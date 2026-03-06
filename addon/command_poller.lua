@@ -12,7 +12,9 @@
 --   SAY <text>          — say text in /say
 --   STOP                — stop the active bot
 --   START               — start the configured bot
---   MODE fishing|herbalism — switch bot mode
+--   MODE fishing|herbalism|leveling — switch bot mode
+--   PROFILE <name>      — load/hot-swap a leveling profile
+--   PROFILES            — print available profiles to chat
 --   MAIL                — trigger auto-mail immediately
 --   STATUS              — write status JSON to response file
 --   PRINT <text>        — print text to chat frame
@@ -58,12 +60,19 @@ local function BuildStatusJSON()
     local running      = false
     if mode == "fishing"   and GB_Fishing   then running = GB_Fishing.IsRunning()   end
     if mode == "herbalism" and GB_Herbalism then running = GB_Herbalism.IsRunning() end
+    if mode == "leveling"  and GB_Leveling  then running = GB_Leveling.IsRunning()  end
+
+    local plevel = UnitLevel("player") or 0
+    local activeProfile = GB_Profiles and GB_Profiles.Active()
+    local profileName   = (activeProfile and activeProfile.name) or ""
 
     return string.format(
         '{"player":"%s","zone":"%s","mode":"%s","running":%s,'
-        .. '"hp":%d,"maxhp":%d,"bagFull":%.1f,"freeSlots":%d,"time":%.0f}',
+        .. '"hp":%d,"maxhp":%d,"bagFull":%.1f,"freeSlots":%d,'
+        .. '"level":%d,"profile":"%s","time":%.0f}',
         player, zone, mode, running and "true" or "false",
-        hp, maxhp, fullPct, freeSlots, GetTime()
+        hp, maxhp, fullPct, freeSlots,
+        plevel, profileName, GetTime()
     )
 end
 
@@ -100,23 +109,55 @@ local function ExecuteCommand(line)
     elseif cmd == "STOP" then
         if GB_Fishing   then GB_Fishing.Stop()   end
         if GB_Herbalism then GB_Herbalism.Stop() end
+        if GB_Leveling  then GB_Leveling.Stop()  end
         GB_Utils.Print("Bot stopped by remote command.")
 
     elseif cmd == "START" then
         local cfg = GromitBot_GetConfig()
-        if cfg.mode == "fishing"   then GB_Fishing.Start()   end
+        if cfg.mode == "fishing"   then GB_Fishing.Start()  end
         if cfg.mode == "herbalism" then GB_Herbalism.Start() end
+        if cfg.mode == "leveling"  then
+            local p = GB_Profiles and GB_Profiles.Active()
+            if p then
+                GB_Leveling.Start()
+            else
+                GB_Utils.Print("Leveling mode: no profile loaded. Send PROFILE <name> first.")
+            end
+        end
         GB_Utils.Print("Bot started by remote command.")
 
     elseif cmd == "MODE" then
         local newMode = args and args:lower() or ""
-        if newMode == "fishing" or newMode == "herbalism" then
+        if newMode == "fishing" or newMode == "herbalism" or newMode == "leveling" then
             GromitBotConfig.mode = newMode
-            -- Stop active bot first
             if GB_Fishing   then GB_Fishing.Stop()   end
             if GB_Herbalism then GB_Herbalism.Stop() end
+            if GB_Leveling  then GB_Leveling.Stop()  end
             GB_Utils.Print("Mode set to " .. newMode)
+        else
+            GB_Utils.Print("Unknown mode: " .. newMode)
         end
+
+    elseif cmd == "PROFILE" then
+        local name = args and GB_Utils.Trim(args) or ""
+        if name == "" then
+            local p = GB_Profiles and GB_Profiles.Active()
+            GB_Utils.Print("Active: " .. (p and p.name or "none"))
+            GB_Utils.Print("Available: " .. (GB_Profiles and GB_Profiles.ListNames() or "?"))
+        elseif GB_Leveling and GB_Leveling.IsRunning() then
+            if GB_Leveling.SwapProfile(name) then
+                GromitBotConfig.mode = "leveling"
+                GromitBotConfig.levelingProfile = name
+            end
+        else
+            if GB_Profiles and GB_Profiles.Load(name) then
+                GromitBotConfig.mode = "leveling"
+                GromitBotConfig.levelingProfile = name
+            end
+        end
+
+    elseif cmd == "PROFILES" then
+        GB_Utils.Print("Available profiles: " .. (GB_Profiles and GB_Profiles.ListNames() or "none"))
 
     elseif cmd == "MAIL" then
         GB_Inventory.StartAutoMail()

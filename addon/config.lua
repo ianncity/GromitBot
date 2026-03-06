@@ -28,6 +28,18 @@ local DEFAULTS = {
     chatReplyMinSayMessages = 2,
     chatReplySayRange       = 20,
 
+    -- GM / staff detection: stop bot and send a confused reply if a whisper
+    -- looks like it might be from a GM. Pattern matched case-insensitively.
+    gmDetectEnabled  = true,
+    gmNamePatterns   = { "^GM", "^%[GM%]", "Blizz", "GameMaster", "CM", "^Staff" },
+    gmKeywords       = {
+        "bot", "botting", "cheat", "hack", "automat", "script",
+        "third.party", "violation", "suspended", "banned", "report",
+        "game master", "gm here",
+    },
+    -- Delay (seconds) before auto-stopping when GM phrases detected
+    gmStopDelay      = 2.0,
+
     -- Farming zone name (used for navmesh selection)
     farmZone = "Arathi Highlands",
 
@@ -45,11 +57,42 @@ local DEFAULTS = {
     navmeshPath = "Interface\\AddOns\\GromitBot\\navmesh\\arathi.nav",
 
     -- Human behaviour tuning
-    humanJumpChance      = 0.08,  -- probability per second of random jump
-    humanTurnAmount      = 0.15,  -- max camera turn in radians per random event
-    humanTurnInterval    = { 4, 10 }, -- seconds between random camera turns
+    humanJumpChance      = 0.08,  -- average probability per second of random jump
+    humanJumpMinGap      = 4.0,   -- minimum seconds between consecutive jumps
+    humanTurnAmount      = 0.15,  -- max camera yaw (radians) per random event
+    humanTurnInterval    = { 4, 10 }, -- seconds between random camera turns (Gaussian)
     humanWiggleRadius    = 2.0,   -- max wander offset from home position (yards)
-    humanWiggleInterval  = { 8, 20 }, -- seconds between position wiggles
+    humanWiggleInterval  = { 8, 20 }, -- seconds between position wiggles (Gaussian)
+
+    -- Camera pitch (vertical look) variation
+    humanPitchEnabled    = true,
+    humanPitchAmount     = 0.12,  -- max vertical look offset in radians
+
+    -- Random emotes (SIT, YAWN, STRETCH, etc.)
+    humanEmotesEnabled   = true,
+    humanEmoteInterval   = { 45, 120 }, -- seconds between emotes (Gaussian)
+
+    -- Briefly target a nearby unit to mimic player curiosity
+    humanTargetScanEnabled = true,
+    humanScanInterval      = { 30, 90 }, -- seconds between target scans (Gaussian)
+
+    -- AFK / session break system
+    humanBreaksEnabled   = true,
+    humanBreakInterval   = { 2700, 5400 }, -- 45–90 min between breaks (Gaussian)
+    humanBreakDuration   = { 180, 900 },   -- 3–15 min break length (Gaussian)
+
+    -- ---- Leveling bot settings ----------------------------
+    -- Active profile name (must match a registered profile's .name field)
+    levelingProfile = "",
+
+    -- Pull range override (yards). 0 = auto-detect from rotation maxRange.
+    levelingPullRange    = 0,
+
+    -- Looted corpse memory size (how many GUIDs to remember to avoid re-loot)
+    levelingCorpseMemory = 50,
+
+    -- Combat timeout (s) before the bot retreats and resets
+    levelingCombatTimeout = 30,
 
     -- Command file polled by Lua (written by Python agent)
     commandFilePath = "C:\\GromitBot\\command.txt",

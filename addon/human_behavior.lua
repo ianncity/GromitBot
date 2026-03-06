@@ -1,132 +1,308 @@
 -- ============================================================
--- human_behavior.lua — Random humanisation while bot runs:
---   • Occasional jumps while running
---   • Frequent small camera turns
---   • Slight position wanders (always returns to home)
+-- human_behavior.lua — Anti-detection humanisation layer:
+--   • Gaussian-distributed camera turns (yaw + pitch)
+--   • Random jumps with enforced minimum gap
+--   • Position wanders (returns to home after)
+--   • Random emotes & target scanning
+--   • Occasional sit/stand pauses
+--   • Camera pitch (vertical look) variation
+--   • "Distracted" micro-break system (random longer pauses)
+--   • Session-level AFK break scheduling
 -- ============================================================
 
 GB_Human = {}
 
-local homeX, homeY, homeZ = nil, nil, nil
-local lastJump       = 0
-local lastTurn       = 0
-local lastWiggle     = 0
-local nextTurnAt     = 0
-local nextWiggleAt   = 0
-local isWiggling     = false
-local wiggleTarget   = nil
-local wiggleStarted  = 0
+local homeX, homeY, homeZ    = nil, nil, nil
+local lastJump                = 0
+local nextTurnAt              = 0
+local nextWiggleAt            = 0
+local nextEmoteAt             = 0
+local nextScanAt              = 0
+local nextPitchAt             = 0
+local isWiggling              = false
+
+-- AFK / session break state
+local sessionStartTime        = nil
+local nextBreakAt             = nil
+local isOnBreak               = false
+local breakEndAt              = nil
+
+-- ---- Gaussian-like random using Box-Muller approximation ---
+-- Returns a value normally distributed around `mean` with `stddev`.
+-- Clamped to [mean - 3*stddev, mean + 3*stddev] to avoid extremes.
+local function GaussRand(mean, stddev)
+    -- Box-Muller transform
+    local u1 = math.max(1e-9, math.random())
+    local u2 = math.random()
+    local z  = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+    local v  = mean + stddev * z
+    -- Soft clamp: pull in outliers beyond 2.5 sigma
+    local lo = mean - 2.5 * stddev
+    local hi = mean + 2.5 * stddev
+    return math.max(lo, math.min(hi, v))
+end
+
+-- ---- Sample next interval with natural variance ------------
+-- Uses Gaussian centred at midpoint of [lo, hi].
+local function NextInterval(lo, hi)
+    local mid = (lo + hi) * 0.5
+    local sd  = (hi - lo) * 0.18   -- ~34 % of range as one sigma
+    return math.max(lo, math.min(hi, GaussRand(mid, sd)))
+end
 
 -- ---- Initialise home position on bot start -----------------
 function GB_Human.SetHome()
     if GB_GetPlayerPos then
         homeX, homeY, homeZ = GB_GetPlayerPos()
+        sessionStartTime = GetTime()
+        GB_Human.ScheduleNextBreak()
         GB_Utils.Debug(string.format("Home set to %.1f, %.1f, %.1f", homeX, homeY, homeZ))
     end
 end
 
--- ---- Random camera turn ------------------------------------
+-- ---- Schedule the next AFK break ---------------------------
+function GB_Human.ScheduleNextBreak()
+    local cfg = GromitBot_GetConfig()
+    if not cfg.humanBreaksEnabled then return end
+    local lo = cfg.humanBreakInterval[1] or 2700   -- 45 min
+    local hi = cfg.humanBreakInterval[2] or 5400   -- 90 min
+    nextBreakAt = GetTime() + NextInterval(lo, hi)
+    GB_Utils.Debug(string.format("Next AFK break in %.0f s", nextBreakAt - GetTime()))
+end
+
+-- ---- Is the bot currently on an AFK break? -----------------
+function GB_Human.IsOnBreak()
+    return isOnBreak
+end
+
+-- ---- Force-cancel an in-progress AFK break -----------------
+function GB_Human.CancelBreak()
+    if not isOnBreak then return end
+    isOnBreak  = false
+    breakEndAt = nil
+    DoEmote("STAND")
+    GB_Utils.Print("[AFK] Break cancelled.")
+    GB_Human.ScheduleNextBreak()
+end
+
+-- ---- Random camera yaw turn --------------------------------
 local function RandomCameraYaw()
     local cfg   = GromitBot_GetConfig()
-    local delta = GB_Utils.RandFloat(-cfg.humanTurnAmount, cfg.humanTurnAmount)
+    -- Use Gaussian: most turns are small, occasional larger swings
+    local maxAmt = cfg.humanTurnAmount or 0.15
+    local delta  = GaussRand(0, maxAmt * 0.5)
+    delta = math.max(-maxAmt, math.min(maxAmt, delta))
 
-    -- WoW 1.12 camera control
-    -- TurnLeftStart / TurnRightStart require held keypress; we instead
-    -- use SetView (available via SuperWoW or just rotate the facing).
     if Camera_SetYaw then
         Camera_SetYaw(delta)
+    elseif delta > 0 then
+        TurnRightStart()
+        GB_Utils.After(math.abs(delta) * 0.25, function() TurnRightStop() end)
     else
-        -- Emulate via player facing for small cosmetic jitter
-        -- This slightly alters movement direction; keep delta small.
-        if delta > 0 then
-            TurnRightStart()
-            GB_Utils.After(math.abs(delta) * 0.3, function() TurnRightStop() end)
-        else
-            TurnLeftStart()
-            GB_Utils.After(math.abs(delta) * 0.3, function() TurnLeftStop() end)
-        end
+        TurnLeftStart()
+        GB_Utils.After(math.abs(delta) * 0.25, function() TurnLeftStop() end)
+    end
+end
+
+-- ---- Random camera pitch (look up/down) --------------------
+local function RandomCameraPitch()
+    local cfg = GromitBot_GetConfig()
+    if not cfg.humanPitchEnabled then return end
+    -- Subtle vertical drift: ±10 degrees
+    local maxPitch = cfg.humanPitchAmount or 0.12   -- radians
+    local delta    = GaussRand(0, maxPitch * 0.4)
+    delta = math.max(-maxPitch, math.min(maxPitch, delta))
+    if Camera_SetPitch then
+        Camera_SetPitch(delta)
     end
 end
 
 -- ---- Random jump -------------------------------------------
 local function DoRandomJump()
     JumpOrAscendStart()
-    GB_Utils.After(0.1, function() JumpOrAscendStop() end)
+    GB_Utils.After(0.08 + math.random() * 0.05, function() JumpOrAscendStop() end)
 end
 
--- ---- Wiggle: move to a random nearby point then return -----
+-- ---- Random emote ------------------------------------------
+local EMOTES = {
+    "STRETCH", "YAWN", "SCRATCH", "BORED", "FIDGET",
+    "WAVE", "NOD", "SHRUG", "SIT", "STAND",
+    "ROAR", "CHEER", "LAUGH", "SIGH", "CURIOUS",
+}
+local function DoRandomEmote()
+    local cfg = GromitBot_GetConfig()
+    if not cfg.humanEmotesEnabled then return end
+    local emote = EMOTES[math.random(#EMOTES)]
+    -- SIT / STAND are special: sit for a brief moment then stand
+    if emote == "SIT" then
+        DoEmote("SIT")
+        local sitDur = GaussRand(4.0, 1.5)
+        sitDur = math.max(2.0, math.min(8.0, sitDur))
+        GB_Utils.After(sitDur, function() DoEmote("STAND") end)
+    else
+        DoEmote(emote)
+    end
+    GB_Utils.Debug("Emote: " .. emote)
+end
+
+-- ---- Position wiggle: wander then return home --------------
 local function StartWiggle()
     if not homeX then return end
     local cfg = GromitBot_GetConfig()
     local r   = cfg.humanWiggleRadius
 
+    -- Gaussian radius — usually small, occasionally wider
     local angle  = GB_Utils.RandFloat(0, 2 * math.pi)
-    local radius = GB_Utils.RandFloat(0.5, r)
+    local radius = math.abs(GaussRand(0, r * 0.4))
+    radius = math.max(0.5, math.min(r, radius))
+
     local tx = homeX + math.cos(angle) * radius
     local ty = homeY + math.sin(angle) * radius
 
-    wiggleTarget = { x = tx, y = ty }
-    isWiggling   = true
-    wiggleStarted = GetTime()
+    isWiggling = true
 
     if MoveToPosition then
-        local px, py, pz = GB_GetPlayerPos()
-        MoveToPosition(tx, ty, pz)
+        local _, _, pz = GB_GetPlayerPos and GB_GetPlayerPos() or homeX, homeY, homeZ
+        MoveToPosition(tx, ty, pz or homeZ)
 
-        -- After 2 s return home
-        GB_Utils.After(2.0, function()
+        local returnDelay = GaussRand(2.2, 0.5)
+        returnDelay = math.max(1.0, math.min(4.0, returnDelay))
+        GB_Utils.After(returnDelay, function()
             if isWiggling then
                 MoveToPosition(homeX, homeY, homeZ)
-                GB_Utils.After(2.0, function()
+                GB_Utils.After(GaussRand(2.0, 0.4), function()
                     isWiggling = false
                 end)
             end
         end)
     else
-        -- Fallback: just do a waddling forward-backward move
         MoveForwardStart()
-        GB_Utils.After(0.4, function()
+        GB_Utils.After(GaussRand(0.4, 0.1), function()
             MoveForwardStop()
             isWiggling = false
         end)
     end
 end
 
--- ---- Main tick (~0.5 s for human behavior) -----------------
+-- ---- AFK break: stop bot, idle for a random duration -------
+local function StartAFKBreak()
+    local cfg    = GromitBot_GetConfig()
+    local lo     = cfg.humanBreakDuration[1] or 180   -- 3 min
+    local hi     = cfg.humanBreakDuration[2] or 900   -- 15 min
+    local dur    = NextInterval(lo, hi)
+
+    isOnBreak  = true
+    breakEndAt = GetTime() + dur
+
+    -- Stop all bots
+    if GB_Fishing   then GB_Fishing.Stop()   end
+    if GB_Herbalism then GB_Herbalism.Stop() end
+
+    -- Sit down for the break
+    GB_Utils.After(GaussRand(2.0, 0.8), function() DoEmote("SIT") end)
+
+    GB_Utils.Print(string.format("[AFK] Break for %.0f s — resuming after.", dur))
+    GB_Utils.Debug(string.format("AFK break: %.0f s", dur))
+end
+
+-- ---- End AFK break and resume the bot ----------------------
+local function EndAFKBreak()
+    isOnBreak = false
+    DoEmote("STAND")
+    local cfg = GromitBot_GetConfig()
+    GB_Utils.After(GaussRand(3.0, 1.0), function()
+        if cfg.mode == "fishing"   and GB_Fishing   then
+            GB_Human.SetHome()
+            GB_Fishing.Start()
+        elseif cfg.mode == "herbalism" and GB_Herbalism then
+            GB_Human.SetHome()
+            GB_Herbalism.Start()
+        end
+        GB_Utils.Print("[AFK] Break ended — resuming bot.")
+    end)
+    GB_Human.ScheduleNextBreak()
+end
+
+-- ---- Main tick (~0.5 s) ------------------------------------
 function GB_Human.Tick()
     local cfg = GromitBot_GetConfig()
     local now = GetTime()
 
-    -- ---- Random camera turn ---------------------------------
+    -- ---- AFK break management -------------------------------
+    if cfg.humanBreaksEnabled then
+        if isOnBreak then
+            if breakEndAt and now >= breakEndAt then
+                EndAFKBreak()
+            end
+            return  -- suppress all other human actions during break
+        elseif nextBreakAt and now >= nextBreakAt then
+            StartAFKBreak()
+            return
+        end
+    end
+
+    -- ---- Random camera yaw turn -----------------------------
     if now >= nextTurnAt then
         RandomCameraYaw()
         local lo = cfg.humanTurnInterval[1] or 4
         local hi = cfg.humanTurnInterval[2] or 10
-        nextTurnAt = now + GB_Utils.RandFloat(lo, hi)
+        nextTurnAt = now + NextInterval(lo, hi)
     end
 
-    -- ---- Random jump (while running only) -------------------
-    if math.random() < cfg.humanJumpChance * 0.5 then  -- per tick (0.5 s)
-        if now - lastJump > 3.0 then
+    -- ---- Random camera pitch --------------------------------
+    if now >= nextPitchAt then
+        RandomCameraPitch()
+        nextPitchAt = now + NextInterval(8, 22)
+    end
+
+    -- ---- Random jump (with minimum gap + Gaussian spacing) --
+    if now - lastJump > (cfg.humanJumpMinGap or 4.0) then
+        -- Poisson-like: test once per tick with correct average rate
+        local tickRate    = 0.5
+        local avgInterval = 1.0 / (cfg.humanJumpChance or 0.08)
+        local prob        = tickRate / avgInterval
+        if math.random() < prob then
             DoRandomJump()
             lastJump = now
         end
     end
 
-    -- ---- Position wiggle (fishing: while waiting for bobber only) --
-    if not isWiggling and now >= nextWiggleAt then
-        -- Only wiggle during fishing WAIT_BOBBER or herbalism PATHFIND
-        local bot = GromitBot_GetConfig().mode
-        local doWiggle = false
-        if bot == "fishing"   and GB_Fishing   and GB_Fishing.IsRunning()   then doWiggle = true end
-        if bot == "herbalism" and GB_Herbalism and GB_Herbalism.IsRunning() then doWiggle = true end
+    -- ---- Random emote ---------------------------------------
+    if now >= nextEmoteAt then
+        DoRandomEmote()
+        local lo = cfg.humanEmoteInterval[1] or 45
+        local hi = cfg.humanEmoteInterval[2] or 120
+        nextEmoteAt = now + NextInterval(lo, hi)
+    end
 
-        if doWiggle then
-            StartWiggle()
-        end
+    -- ---- Random target scan ---------------------------------
+    if now >= nextScanAt then
+        DoRandomTargetScan()
+        local lo = cfg.humanScanInterval[1] or 30
+        local hi = cfg.humanScanInterval[2] or 90
+        nextScanAt = now + NextInterval(lo, hi)
+    end
+
+    -- ---- Position wiggle ------------------------------------
+    if not isWiggling and now >= nextWiggleAt then
+        local mode = cfg.mode
+        local doWiggle = false
+        if mode == "fishing"   and GB_Fishing   and GB_Fishing.IsRunning()   then doWiggle = true end
+        if mode == "herbalism" and GB_Herbalism and GB_Herbalism.IsRunning() then doWiggle = true end
+
+        if doWiggle then StartWiggle() end
 
         local lo = cfg.humanWiggleInterval[1] or 8
         local hi = cfg.humanWiggleInterval[2] or 20
-        nextWiggleAt = now + GB_Utils.RandFloat(lo, hi)
+        nextWiggleAt = now + NextInterval(lo, hi)
     end
+end
+
+-- ---- Renamed for clarity (used in Herbalism target scan) ---
+function DoRandomTargetScan()
+    local cfg = GromitBot_GetConfig()
+    if not cfg.humanTargetScanEnabled then return end
+    TargetNearestFriend()
+    GB_Utils.After(GaussRand(1.5, 0.6), function() ClearTarget() end)
+    GB_Utils.Debug("Target scan")
 end

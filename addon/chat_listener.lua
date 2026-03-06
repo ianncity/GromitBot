@@ -1,17 +1,85 @@
 -- ============================================================
 -- chat_listener.lua — Intercepts whispers and /say messages,
 -- queries Ollama, replies with human-like delay.
+-- Anti-detection: GM name / keyword detection stops the bot
+-- immediately and crafts a confused, innocent-sounding reply.
 -- ============================================================
 
 GB_Chat = {}
 
 -- Track per-sender say message counts this session
-local sayCounts   = {}  -- { [name] = count }
+local sayCounts    = {}  -- { [name] = count }
 local pendingReply = {}  -- { [name] = { type, text } }  waiting for Ollama
 
 -- ---- Rate limiting -----------------------------------------
 local lastReplyTime = {}  -- { [name] = GetTime() }
 local REPLY_COOLDOWN = 8  -- seconds between replies to same person
+
+-- ---- GM canned responses (chosen randomly) ----------------
+local GM_RESPONSES = {
+    "Oh hey! Sorry, I was a bit distracted — what's up?",
+    "Haha sorry, was just zoning out a bit. Did you need something?",
+    "Oh! Hi! Wasn't expecting a message, lol. Everything ok?",
+    "Hey, sorry for the slow response — just chilling. What's going on?",
+    "Ah, haha, sorry I'm a little slow today. How can I help?",
+}
+
+-- ---- Rate limiting -----------------------------------------
+local lastReplyTime = {}  -- { [name] = GetTime() }
+local REPLY_COOLDOWN = 8  -- seconds between replies to same person
+
+-- ---- Detect if the sender name looks like a GM account ----
+local function LooksLikeGM(senderName)
+    local cfg = GromitBot_GetConfig()
+    if not cfg.gmDetectEnabled then return false end
+    for _, pattern in ipairs(cfg.gmNamePatterns or {}) do
+        if senderName:match(pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+-- ---- Detect GM keywords in message text --------------------
+local function ContainsGMKeyword(text)
+    local cfg = GromitBot_GetConfig()
+    if not cfg.gmDetectEnabled then return false end
+    local lower = text:lower()
+    for _, kw in ipairs(cfg.gmKeywords or {}) do
+        if lower:find(kw, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+-- ---- Handle a suspected GM contact -------------------------
+local function HandleGMContact(senderName, msgType)
+    local cfg = GromitBot_GetConfig()
+
+    GB_Utils.Print("|cffff0000[GromitBot] Possible GM contact from " .. senderName .. " — stopping bot!|r")
+
+    -- Stop all bots immediately
+    local stopDelay = cfg.gmStopDelay or 2.0
+    GB_Utils.After(stopDelay * 0.1, function()
+        if GB_Fishing   then GB_Fishing.Stop()   end
+        if GB_Herbalism then GB_Herbalism.Stop() end
+    end)
+
+    -- Send a human-like confused reply after a natural delay
+    local replyDelay = GB_Utils.GaussRand(2.5, 0.7)
+    replyDelay = math.max(1.5, math.min(5.0, replyDelay))
+    GB_Utils.After(replyDelay, function()
+        local response = GM_RESPONSES[math.random(#GM_RESPONSES)]
+        if msgType == "WHISPER" then
+            SendChatMessage(response, "WHISPER", nil, senderName)
+        else
+            SendChatMessage(response, "SAY")
+        end
+        lastReplyTime[senderName] = GetTime()
+        GB_Utils.Debug("GM reply sent to " .. senderName)
+    end)
+end
 
 -- ---- Build the full Ollama prompt --------------------------
 local function BuildPrompt(msgType, senderName, text)
@@ -125,6 +193,14 @@ function GB_Chat.OnChatMessage(msgType, text, language, channelName,
     local last = lastReplyTime[senderName] or 0
     if GetTime() - last < REPLY_COOLDOWN then
         GB_Utils.Debug("Cooldown active for " .. senderName)
+        return
+    end
+
+    -- ---- GM detection (highest priority) -------------------
+    -- Check sender name pattern OR message keywords.
+    -- Act immediately regardless of other filters.
+    if LooksLikeGM(senderName) or (isWhisper and ContainsGMKeyword(text)) then
+        HandleGMContact(senderName, simpleMsgType)
         return
     end
 

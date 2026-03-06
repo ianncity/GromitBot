@@ -114,15 +114,16 @@ end
 local function ShouldReply(msgType, senderName, x, y, z)
     local cfg = GromitBot_GetConfig()
 
-    -- Never reply more than chatReplyMaxPerSender times to the same person
+    -- Whispers are always answered — no range or reply-count gate.
+    if msgType == "WHISPER" then
+        return true
+    end
+
+    -- SAY: never reply more than chatReplyMaxPerSender times to the same person
     local replies = replyCounts[senderName] or 0
     if replies >= cfg.chatReplyMaxPerSender then
         GB_Utils.Debug(senderName .. " reply limit reached (" .. replies .. ") — ignoring")
         return false
-    end
-
-    if msgType == "WHISPER" then
-        return true  -- always reply to whispers (within limit)
     end
 
     -- SAY: only if sender is within chatReplySayRange ft

@@ -1,0 +1,21 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Local publish output
+/publish/
+
+# Runtime working directories
+/state/
+/ipc/
+/logs/
+
+# Runtime artifacts when app runs from project directory
+/src/GromitBot.Agent/ipc/
+/src/GromitBot.Agent/State/slot-*.json
+
+# IDE/user files
+.vs/
+*.user
+*.suo
+

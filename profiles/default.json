@@ -1,0 +1,18 @@
+{
+  "name": "default",
+  "description": "Starter leveling profile.",
+  "navMesh": "default",
+  "routeNodeIds": [1, 2, 3],
+  "steps": [
+    {
+      "zone": "StarterZone",
+      "action": "grind",
+      "targetLevel": 5
+    },
+    {
+      "zone": "StarterZone",
+      "action": "quest",
+      "targetLevel": 10
+    }
+  ]
+}

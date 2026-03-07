@@ -1,1 +1,0 @@
-# GromitBot Paths Package

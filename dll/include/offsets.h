@@ -30,7 +30,7 @@
 #define PLAYER_POS_Y               0xABD700
 #define PLAYER_POS_Z               0xABD704
 #define PLAYER_FACING              0xABD720
-#define PLAYER_MAP_ID              0xABCEEB8
+#define PLAYER_MAP_ID              0xABCEB8
 
 // ---- WoW GUID types ----------------------------------------
 #define HIGHGUID_UNIT              0x00F10000

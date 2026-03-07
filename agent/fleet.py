@@ -70,12 +70,14 @@ LOG_LEVEL         = os.environ.get("LOG_LEVEL", "INFO").upper()
 AGENT_TIMEOUT     = float(os.environ.get("GROMITBOT_AGENT_TIMEOUT", "10"))
 
 # ---- Logging ------------------------------------------------
+_FLEET_LOG_DIR = Path(os.environ.get("GROMITBOT_FLEET_LOG_DIR", r"C:\GromitBot"))
+_FLEET_LOG_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(r"C:\GromitBot\fleet.log", encoding="utf-8"),
+        logging.FileHandler(str(_FLEET_LOG_DIR / "fleet.log"), encoding="utf-8"),
     ],
 )
 log = logging.getLogger("gromitbot-fleet")

@@ -132,6 +132,15 @@ set "PYTHON="
 for /f "tokens=*" %%i in ('where python 2^>nul') do (
     if not defined PYTHON set "PYTHON=%%i"
 )
+:: Verify that the python we found actually works (the Windows Store stub
+:: appears on PATH on fresh installs but opens the Store instead of running)
+if defined PYTHON (
+    "%PYTHON%" --version >nul 2>&1
+    if errorlevel 1 (
+        echo [*] Python at %PYTHON% is a stub -- will install real Python 3.11...
+        set "PYTHON="
+    )
+)
 if not defined PYTHON (
     echo [*] Python not found -- installing Python 3.11...
     winget install --id Python.Python.3.11 ^

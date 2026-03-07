@@ -1,2 +1,0 @@
-# GromitBot VM Agent — Python dependencies
-aiohttp>=3.9.0            # Discord webhook status push

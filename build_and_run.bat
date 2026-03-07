@@ -67,23 +67,6 @@ echo   Phase 0: Installing prerequisites
 echo ================================================================
 echo.
 
-:: ---- 0a. Ensure winget is available ---------------------------
-echo [0a] Checking winget...
-where winget >nul 2>&1
-if errorlevel 1 (
-    echo [*] winget not found.  Attempting to register App Installer...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe" ^
-        2>nul
-    where winget >nul 2>&1
-    if errorlevel 1 (
-        echo [!] Could not enable winget automatically.
-        echo     Please install 'App Installer' from the Microsoft Store
-        echo     ^(or upgrade to Windows 10 21H1+ / Windows 11^), then re-run.
-        goto :error
-    )
-)
-echo [+] winget ready.
 
 :: ---- 0b. Visual Studio 2022 Build Tools + VC++ workload -------
 echo.
@@ -91,10 +74,16 @@ echo [0b] Checking Visual Studio 2022 Build Tools...
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if not exist "%VSWHERE%" (
     echo [*] VS Build Tools not found.
-    echo     Installing -- this may take 10-20 minutes, please wait...
-    winget install --id Microsoft.VisualStudio.2022.BuildTools ^
-        --silent --accept-package-agreements --accept-source-agreements ^
-        --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.Windows10SDK.19041"
+    echo     Downloading installer -- this may take 10-20 minutes, please wait...
+    curl -L --silent "https://aka.ms/vs/17/release/vs_BuildTools.exe" -o "%TEMP%\vs_BuildTools.exe"
+    if errorlevel 1 (
+        echo [!] Failed to download VS Build Tools installer.
+        goto :error
+    )
+    "%TEMP%\vs_BuildTools.exe" --quiet --wait ^
+        --add Microsoft.VisualStudio.Workload.VCTools ^
+        --includeRecommended ^
+        --add Microsoft.VisualStudio.Component.Windows10SDK.19041
     if errorlevel 1 (
         echo [!] VS Build Tools installation failed.
         goto :error
@@ -109,9 +98,14 @@ echo.
 echo [0c] Checking CMake...
 where cmake >nul 2>&1
 if errorlevel 1 (
-    echo [*] CMake not found -- installing...
-    winget install --id Kitware.CMake ^
-        --silent --accept-package-agreements --accept-source-agreements
+    echo [*] CMake not found -- downloading installer...
+    curl -L --silent "https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-windows-x86_64.msi" ^
+         -o "%TEMP%\cmake_installer.msi"
+    if errorlevel 1 (
+        echo [!] Failed to download CMake installer.
+        goto :error
+    )
+    msiexec /i "%TEMP%\cmake_installer.msi" /quiet /norestart ALLUSERS=1 ADD_CMAKE_TO_PATH=System
     if errorlevel 1 (
         echo [!] CMake installation failed.
         goto :error
@@ -142,9 +136,14 @@ if defined PYTHON (
     )
 )
 if not defined PYTHON (
-    echo [*] Python not found -- installing Python 3.11...
-    winget install --id Python.Python.3.11 ^
-        --silent --accept-package-agreements --accept-source-agreements
+    echo [*] Python not found -- downloading Python 3.11 installer...
+    curl -L --silent "https://www.python.org/ftp/python/3.11.9/python-3.11.9.exe" ^
+         -o "%TEMP%\python311_installer.exe"
+    if errorlevel 1 (
+        echo [!] Failed to download Python 3.11 installer.
+        goto :error
+    )
+    "%TEMP%\python311_installer.exe" /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
     if errorlevel 1 (
         echo [!] Python 3.11 installation failed.
         goto :error

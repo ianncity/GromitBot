@@ -11,7 +11,7 @@
 // Strategy:
 //   1. Read the D3D8 device vtable pointer from WoW's static D3D
 //      device pointer (offset 0x00C5DF88 for build 5875).
-//   2. Patch vtable[42] (EndScene index for D3D8) to our hook.
+//   2. Patch vtable[35] (EndScene index for D3D8) to our hook.
 //   3. On first call, grab the Lua state and register GB_ funcs.
 //   4. Restore the original pointer and stop hooking.
 //

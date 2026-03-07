@@ -30,6 +30,7 @@ venv/
 command.txt
 command_status.json
 agent.log
+fleet.log
 
 # WoW SavedVariables (user-specific)
 *.lua.bak

@@ -183,29 +183,42 @@ exit /b 0
 :: ----------------------------------------------------------------
 echo.
 echo [0b] Checking CMake...
+set "CMAKE_DIR=C:\cmake"
+:: Check if cmake is already on PATH or in our known install location
 where cmake >nul 2>&1
 if not errorlevel 1 (
     echo [+] CMake already installed.
     exit /b 0
 )
-echo [*] CMake not found -- downloading installer...
-curl -L --silent "https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-windows-x86_64.msi" -o "%TEMP%\cmake_installer.msi"
+if exist "!CMAKE_DIR!\bin\cmake.exe" (
+    set "PATH=!PATH!;!CMAKE_DIR!\bin"
+    echo [+] CMake found at !CMAKE_DIR!
+    exit /b 0
+)
+echo [*] CMake not found -- downloading portable zip...
+set "CMAKE_ZIP=%TEMP%\cmake.zip"
+set "CMAKE_EXTRACT=%TEMP%\cmake_extract"
+curl -L --silent "https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-windows-x86_64.zip" -o "!CMAKE_ZIP!"
 if errorlevel 1 (
-    echo [!] Failed to download CMake installer.
+    echo [^^!] Failed to download CMake.
     exit /b 1
 )
-msiexec /i "%TEMP%\cmake_installer.msi" /quiet /norestart ALLUSERS=1 ADD_CMAKE_TO_PATH=System
-set "MSI_EC=!ERRORLEVEL!"
-if !MSI_EC! EQU 3010 (
-    echo [+] CMake installed -- PATH update may need a new shell.
-)
-if !MSI_EC! NEQ 0 if !MSI_EC! NEQ 3010 (
-    echo [!] CMake installation failed (exit code !MSI_EC!).
+echo [*] Extracting CMake...
+if not exist "!CMAKE_EXTRACT!" mkdir "!CMAKE_EXTRACT!"
+tar -xf "!CMAKE_ZIP!" -C "!CMAKE_EXTRACT!" 2>nul
+if errorlevel 1 (
+    echo [^^!] Failed to extract CMake archive.
     exit /b 1
 )
-:: Add cmake to PATH for the rest of this session
-if exist "C:\Program Files\CMake\bin" set "PATH=!PATH!;C:\Program Files\CMake\bin"
-echo [+] CMake installed.
+:: Move the extracted folder to C:\cmake
+if exist "!CMAKE_DIR!" rmdir /s /q "!CMAKE_DIR!"
+move "!CMAKE_EXTRACT!\cmake-3.28.3-windows-x86_64" "!CMAKE_DIR!" >nul
+if errorlevel 1 (
+    echo [^^!] Failed to move CMake to !CMAKE_DIR!
+    exit /b 1
+)
+set "PATH=!PATH!;!CMAKE_DIR!\bin"
+echo [+] CMake installed to !CMAKE_DIR!
 exit /b 0
 
 :: ----------------------------------------------------------------

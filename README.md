@@ -67,11 +67,12 @@ installer\bootstrap.bat
 
 Script actions:
 
-1. Creates runtime directories
-2. Restores and publishes self-contained single-file build
-3. Creates/updates `GromitBotAgent` service
-4. Sets recovery policy (auto-restart)
-5. Starts service
+1. Ensures .NET SDK 10 is installed (winget first, then dotnet-install fallback)
+2. Creates runtime directories
+3. Restores and publishes self-contained single-file build
+4. Creates/updates `GromitBotAgent` service
+5. Sets recovery policy (auto-restart)
+6. Starts service
 
 ## Addon
 

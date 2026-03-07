@@ -12,6 +12,15 @@ setlocal EnableDelayedExpansion
 ::  Edit the CONFIG block below if your paths differ from defaults.
 :: ================================================================
 
+:: ---- Auto-elevate to Administrator BEFORE anything else --------
+:: %~f0 only refers to the batch file at the top level (not inside call :label)
+fsutil dirty query %SystemDrive% >nul 2>&1
+if errorlevel 1 (
+    echo [*] Not running as Administrator -- requesting elevation...
+    powershell -Command "Start-Process cmd -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs"
+    exit /b 0
+)
+
 :: ---- Safety net: guarantee the window never closes silently ----
 :: call :main does all the work; no matter how it exits we pause.
 call :main
@@ -62,17 +71,6 @@ set "SWOW_LAUNCHER=!WOW_DIR!\SuperWoWlauncher.exe"
 echo ================================================================
 echo   GromitBot -- Fresh-VM Bootstrap, Build, Launch and Inject
 echo ================================================================
-echo.
-
-:: ================================================================
-:: ADMINISTRATOR CHECK -- auto-elevate if not already admin
-:: ================================================================
-fsutil dirty query %SystemDrive% >nul 2>&1
-if errorlevel 1 (
-    echo [*] Not running as Administrator -- requesting elevation...
-    powershell -Command "Start-Process cmd -ArgumentList '/c \"\"%~f0\"\"' -Verb RunAs"
-    exit /b 0
-)
 echo [+] Running as Administrator.
 echo.
 

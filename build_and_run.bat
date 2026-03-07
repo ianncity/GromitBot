@@ -80,10 +80,17 @@ if not exist "%VSWHERE%" (
         echo [!] Failed to download VS Build Tools installer.
         goto :error
     )
-    "%TEMP%\vs_BuildTools.exe" --quiet --wait ^
+    echo [*] Installing VS Build Tools (a progress window will appear)...
+    "%TEMP%\vs_BuildTools.exe" --passive --wait --norestart ^
         --add Microsoft.VisualStudio.Workload.VCTools ^
         --includeRecommended ^
         --add Microsoft.VisualStudio.Component.Windows10SDK.19041
+    if errorlevel 3010 (
+        echo [+] VS Build Tools installed -- a restart is required before building.
+        echo     Please reboot and then re-run this script.
+        pause
+        exit /b 0
+    )
     if errorlevel 1 (
         echo [!] VS Build Tools installation failed.
         goto :error
@@ -106,7 +113,9 @@ if errorlevel 1 (
         goto :error
     )
     msiexec /i "%TEMP%\cmake_installer.msi" /quiet /norestart ALLUSERS=1 ADD_CMAKE_TO_PATH=System
-    if errorlevel 1 (
+    if errorlevel 3010 (
+        echo [+] CMake installed -- note: PATH update requires a new shell session.
+    ) else if errorlevel 1 (
         echo [!] CMake installation failed.
         goto :error
     )
@@ -294,7 +303,7 @@ cmake -B "%BUILD_DIR%" -A Win32 ^
     -DLUA_INCLUDE_DIR="%LUA_INCLUDE_DIR%" ^
     -DLUA_LIB="%LUA_LIB%" ^
     -DD3D8_INCLUDE_DIR="%D3D8_INCLUDE_DIR%" ^
-    "%SCRIPT_DIR%"
+    "%SCRIPT_DIR:~0,-1%"
 if errorlevel 1 (
     echo [!] CMake configure failed.
     goto :error

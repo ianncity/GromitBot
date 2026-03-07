@@ -49,7 +49,7 @@ echo.
 :: ================================================================
 :: ADMINISTRATOR CHECK
 :: ================================================================
-net session >nul 2>&1
+fsutil dirty query %SystemDrive% >nul 2>&1
 if errorlevel 1 (
     echo [!] This script must be run as Administrator.
     echo     Right-click build_and_run.bat and choose "Run as administrator".

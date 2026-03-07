@@ -1,10 +1,21 @@
 @echo off
 setlocal enabledelayedexpansion
 
+echo [preflight] Starting GromitBot bootstrap...
+
 net session >nul 2>&1
 if errorlevel 1 (
-  echo ERROR: Please run this script as Administrator.
-  exit /b 1
+  echo [preflight] Administrator privileges are required.
+  echo [preflight] Requesting elevation via UAC...
+
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs } catch { exit 1 }"
+  if errorlevel 1 (
+    echo ERROR: Elevation was not granted. Bootstrap cannot continue.
+    goto :fail
+  )
+
+  echo [preflight] Elevated instance launched. Closing this window.
+  exit /b 0
 )
 
 set "SCRIPT_DIR=%~dp0"
@@ -165,4 +176,5 @@ exit /b 0
 :fail
 echo.
 echo Bootstrap failed with exit code %errorlevel%.
+echo If this window opened from Explorer, run bootstrap.bat again and accept the UAC prompt.
 exit /b %errorlevel%

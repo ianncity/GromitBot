@@ -65,6 +65,8 @@ Run as Administrator:
 installer\bootstrap.bat
 ```
 
+If you launch by double-click, the script now requests elevation automatically via UAC.
+
 Script actions:
 
 1. Ensures .NET SDK 10 is installed (winget first, then dotnet-install fallback)
